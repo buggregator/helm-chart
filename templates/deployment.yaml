@@ -1,0 +1,210 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "buggregator.fullname" . }}
+  labels:
+    {{- include "buggregator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "buggregator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "buggregator.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "buggregator.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+            - name: smtp
+              containerPort: 1025
+              protocol: TCP
+            - name: var-dumper
+              containerPort: 9912
+              protocol: TCP
+            - name: monolog
+              containerPort: 9913
+              protocol: TCP
+            - name: profiler
+              containerPort: 9914
+              protocol: TCP
+            - name: metrics
+              containerPort: 2112
+              protocol: TCP
+          env:
+            # --- Application ---
+            - name: APP_ENV
+              value: {{ .Values.app.env | quote }}
+            - name: DEBUG
+              value: {{ .Values.app.debug | quote }}
+            - name: ENCRYPTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "buggregator.secretName" . }}
+                  key: encrypter-key
+
+            # --- Persistence ---
+            - name: PERSISTENCE_DRIVER
+              value: {{ .Values.persistence.driver | quote }}
+
+            {{- if eq .Values.persistence.driver "db" }}
+            # --- External Database ---
+            - name: DB_DRIVER
+              value: {{ .Values.externalDatabase.driver | quote }}
+            - name: DB_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: DB_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: DB_DATABASE
+              value: {{ .Values.externalDatabase.database | quote }}
+            - name: DB_USERNAME
+              value: {{ .Values.externalDatabase.username | quote }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "buggregator.databaseSecretName" . }}
+                  key: db-password
+            {{- end }}
+
+            # --- RoadRunner ---
+            - name: RR_HTTP_NUM_WORKERS
+              value: {{ .Values.roadrunner.http.numWorkers | quote }}
+            - name: RR_JOBS_NUM_WORKERS
+              value: {{ .Values.roadrunner.jobs.numWorkers | quote }}
+            - name: RR_CENTRIFUGE_NUM_WORKERS
+              value: {{ .Values.roadrunner.centrifuge.numWorkers | quote }}
+            - name: RR_LOG_LEVEL
+              value: {{ .Values.roadrunner.logLevel | quote }}
+            - name: RR_LOG_ENCODING
+              value: {{ .Values.roadrunner.logEncoding | quote }}
+            - name: RR_LOG_MODE
+              value: {{ .Values.roadrunner.logMode | quote }}
+            - name: RR_HTTP_ALLOWED_ORIGIN
+              value: {{ .Values.roadrunner.cors.allowedOrigin | quote }}
+            - name: RR_HTTP_ALLOWED_HEADERS
+              value: {{ .Values.roadrunner.cors.allowedHeaders | quote }}
+            - name: RR_HTTP_ALLOW_CREDENTIALS
+              value: {{ .Values.roadrunner.cors.allowCredentials | quote }}
+
+            # --- Broadcasting & Queue ---
+            - name: BROADCAST_CONNECTION
+              value: centrifugo
+            - name: QUEUE_CONNECTION
+              value: roadrunner
+            - name: MONOLOG_DEFAULT_CHANNEL
+              value: roadrunner
+            - name: MONOLOG_DEFAULT_LEVEL
+              value: ERROR
+
+            # --- Centrifugo ---
+            - name: RR_CENTRIFUGE_PROXY_ADDRESS
+              value: "tcp://127.0.0.1:10001"
+            - name: RR_CENTRIFUGE_GRPC_API_ADDRESS
+              value: "127.0.0.1:10000"
+
+            # --- Events ---
+            - name: CLIENT_SUPPORTED_EVENTS
+              value: {{ .Values.supportedEvents | quote }}
+
+            # --- Metrics ---
+            - name: METRICS_DRIVER
+              value: roadrunner
+
+            # --- Auth / SSO ---
+            - name: AUTH_ENABLED
+              value: {{ .Values.auth.enabled | quote }}
+            {{- if .Values.auth.enabled }}
+            - name: AUTH_PROVIDER
+              value: {{ .Values.auth.provider | quote }}
+            - name: AUTH_PROVIDER_URL
+              value: {{ .Values.auth.providerUrl | quote }}
+            - name: AUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "buggregator.authSecretName" . }}
+                  key: client-id
+            - name: AUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "buggregator.authSecretName" . }}
+                  key: client-secret
+            - name: AUTH_CALLBACK_URL
+              value: {{ .Values.auth.callbackUrl | quote }}
+            - name: AUTH_SCOPES
+              value: {{ .Values.auth.scopes | quote }}
+            {{- end }}
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          {{- if .Values.storage.enabled }}
+          volumeMounts:
+            - name: runtime
+              mountPath: /app/runtime
+          {{- end }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+      {{- if .Values.storage.enabled }}
+      volumes:
+        - name: runtime
+          persistentVolumeClaim:
+            claimName: {{ include "buggregator.fullname" . }}-runtime
+      {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

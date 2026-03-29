@@ -1,0 +1,44 @@
+# Example: Buggregator with SSO (Auth0) and external database
+#
+# helm install buggregator ./helm-chart -f helm-chart/values-sso.yaml
+
+persistence:
+  driver: db
+
+externalDatabase:
+  driver: pgsql
+  host: postgresql.database.svc
+  port: 5432
+  database: buggregator
+  username: buggregator
+  password: "change-me"
+
+auth:
+  enabled: true
+  provider: auth0
+  providerUrl: "https://your-tenant.auth0.com"
+  clientId: "your-client-id"
+  clientSecret: "your-client-secret"
+  callbackUrl: "https://buggregator.example.com/auth/sso/callback"
+  scopes: "openid,email,profile"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: buggregator.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: buggregator-tls
+      hosts:
+        - buggregator.example.com
+
+roadrunner:
+  http:
+    numWorkers: 4
+  jobs:
+    numWorkers: 4

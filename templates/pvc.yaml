@@ -1,0 +1,19 @@
+{{- if .Values.storage.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "buggregator.fullname" . }}-runtime
+  labels:
+    {{- include "buggregator.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.storage.storageClassName }}
+  storageClassName: {{ .Values.storage.storageClassName | quote }}
+  {{- end }}
+  accessModes:
+    {{- range .Values.storage.accessModes }}
+    - {{ . }}
+    {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+{{- end }}

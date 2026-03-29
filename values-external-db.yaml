@@ -1,0 +1,28 @@
+# Example: Buggregator with external PostgreSQL database
+#
+# helm install buggregator ./helm-chart -f helm-chart/values-external-db.yaml
+
+persistence:
+  driver: db
+
+externalDatabase:
+  driver: pgsql
+  host: postgresql.database.svc
+  port: 5432
+  database: buggregator
+  username: buggregator
+  password: "change-me"
+
+roadrunner:
+  http:
+    numWorkers: 4
+  jobs:
+    numWorkers: 4
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

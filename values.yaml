@@ -1,0 +1,205 @@
+# -- Number of replicas. Note: >1 requires external database (not embedded Dolt)
+replicaCount: 1
+
+image:
+  repository: ghcr.io/buggregator/server
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag (default is appVersion)
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# Application settings
+# =============================================================================
+app:
+  # -- Application environment: production or local
+  env: production
+  # -- Enable debug mode
+  debug: false
+  # -- Encryption key for cookies/tokens. Auto-generated if empty
+  encrypterKey: ""
+  # -- Use existing secret for encrypter key (key: encrypter-key)
+  existingSecret: ""
+
+# =============================================================================
+# Persistence driver
+# =============================================================================
+persistence:
+  # -- Storage driver: "db" for external database, "cache" for in-memory (embedded Dolt)
+  driver: cache
+
+# =============================================================================
+# External database (used when persistence.driver is "db")
+# =============================================================================
+externalDatabase:
+  # -- Database driver: pgsql or mysql
+  driver: pgsql
+  host: ""
+  port: 5432
+  database: buggregator
+  username: buggregator
+  password: ""
+  # -- Use existing secret for database password (key: db-password)
+  existingSecret: ""
+
+# =============================================================================
+# Authentication / SSO
+# =============================================================================
+auth:
+  # -- Enable SSO authentication
+  enabled: false
+  # -- Auth provider: auth0 or kinde
+  provider: auth0
+  # -- Provider URL (e.g. https://your-tenant.auth0.com)
+  providerUrl: ""
+  # -- OAuth client ID
+  clientId: ""
+  # -- OAuth client secret
+  clientSecret: ""
+  # -- OAuth callback URL (auto-detected from ingress if empty)
+  callbackUrl: ""
+  # -- OAuth scopes
+  scopes: "openid,email,profile"
+  # -- Use existing secret for auth credentials (keys: client-id, client-secret)
+  existingSecret: ""
+
+# =============================================================================
+# RoadRunner configuration
+# =============================================================================
+roadrunner:
+  http:
+    # -- Number of HTTP workers
+    numWorkers: 2
+  jobs:
+    # -- Number of job queue workers
+    numWorkers: 2
+  centrifuge:
+    # -- Number of Centrifugo proxy workers
+    numWorkers: 2
+
+  # -- RoadRunner log level: error, warn, info, debug
+  logLevel: warn
+  # -- Log encoding: json or console
+  logEncoding: json
+  # -- Log mode: production, development, raw
+  logMode: production
+
+  cors:
+    # -- CORS allowed origins
+    allowedOrigin: "*"
+    # -- CORS allowed headers
+    allowedHeaders: "*"
+    # -- CORS allow credentials
+    allowCredentials: true
+
+# =============================================================================
+# Supported event types
+# =============================================================================
+# -- Comma-separated list of supported event types
+supportedEvents: "http-dump,inspector,monolog,profiler,ray,sentry,sms,smtp,var-dump"
+
+# =============================================================================
+# Service ports
+# =============================================================================
+service:
+  type: ClusterIP
+  # -- Main web UI port
+  httpPort: 8000
+  # -- SMTP server port for email capture
+  smtpPort: 1025
+  # -- Symfony VarDumper server port
+  varDumperPort: 9912
+  # -- Monolog server port
+  monologPort: 9913
+  # -- XHProf profiler server port
+  profilerPort: 9914
+  # -- Prometheus metrics port
+  metricsPort: 2112
+
+# =============================================================================
+# Ingress
+# =============================================================================
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: buggregator.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: buggregator-tls
+  #    hosts:
+  #      - buggregator.local
+
+# =============================================================================
+# Storage (PVC for runtime data: attachments, profiles)
+# =============================================================================
+storage:
+  # -- Enable persistent storage for runtime data
+  enabled: true
+  # -- Storage class (empty for default)
+  storageClassName: ""
+  # -- Storage size
+  size: 5Gi
+  # -- Access modes
+  accessModes:
+    - ReadWriteOnce
+
+# =============================================================================
+# Service account
+# =============================================================================
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# =============================================================================
+# Pod configuration
+# =============================================================================
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+resources: {}
+  # limits:
+  #   cpu: 500m
+  #   memory: 512Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# =============================================================================
+# Prometheus ServiceMonitor
+# =============================================================================
+metrics:
+  # -- Enable Prometheus ServiceMonitor
+  serviceMonitor:
+    enabled: false
+    # -- ServiceMonitor namespace (defaults to release namespace)
+    namespace: ""
+    # -- Additional labels for ServiceMonitor
+    labels: {}
+    # -- Scrape interval
+    interval: 30s

@@ -1,0 +1,39 @@
+Buggregator has been deployed!
+
+1. Web UI:
+{{- if .Values.ingress.enabled }}
+  {{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+  {{- end }}
+{{- else }}
+  kubectl port-forward svc/{{ include "buggregator.fullname" . }} {{ .Values.service.httpPort }}:{{ .Values.service.httpPort }} -n {{ .Release.Namespace }}
+  Then open: http://localhost:{{ .Values.service.httpPort }}
+{{- end }}
+
+2. Debugging endpoints (configure your PHP app to send data to):
+   - Sentry DSN:  http://sentry@{{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.httpPort }}
+   - SMTP:        {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.smtpPort }}
+   - VarDumper:   {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.varDumperPort }}
+   - Monolog:     {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.monologPort }}
+   - Profiler:    {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.profilerPort }}
+
+3. Prometheus metrics: port {{ .Values.service.metricsPort }}
+{{- if .Values.metrics.serviceMonitor.enabled }}
+   ServiceMonitor is enabled — Prometheus will auto-discover the endpoint.
+{{- end }}
+
+{{- if .Values.auth.enabled }}
+
+4. SSO Authentication is enabled ({{ .Values.auth.provider }}).
+{{- end }}
+
+{{- if eq .Values.persistence.driver "db" }}
+
+5. External database: {{ .Values.externalDatabase.driver }}://{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}
+{{- else }}
+
+5. Using embedded Dolt database (in-memory/cache mode).
+   For production with multiple replicas, switch to an external database:
+     persistence.driver=db
+     externalDatabase.host=your-db-host
+{{- end }}
