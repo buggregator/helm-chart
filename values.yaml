@@ -1,4 +1,4 @@
-# -- Number of replicas. Note: >1 requires external database (not embedded Dolt)
+# -- Number of replicas
 replicaCount: 1
 
 image:
@@ -12,88 +12,65 @@ nameOverride: ""
 fullnameOverride: ""
 
 # =============================================================================
-# Application settings
+# Database (SQLite)
 # =============================================================================
-app:
-  # -- Application environment: production or local
-  env: production
-  # -- Enable debug mode
-  debug: false
-  # -- Encryption key for cookies/tokens. Auto-generated if empty
-  encrypterKey: ""
-  # -- Use existing secret for encrypter key (key: encrypter-key)
-  existingSecret: ""
+database:
+  # -- SQLite DSN: ":memory:" (default, data lost on restart) or file path for persistence
+  dsn: ":memory:"
 
 # =============================================================================
-# Persistence driver
+# Attachment storage (SMTP attachments, HTTP dump files)
 # =============================================================================
-persistence:
-  # -- Storage driver: "db" for external database, "cache" for in-memory (embedded Dolt)
-  driver: cache
+attachmentStorage:
+  # -- Storage mode: "memory" (default) or "filesystem"
+  mode: memory
+  # -- Directory for filesystem mode (relative to working dir or absolute path)
+  path: /data/storage
 
 # =============================================================================
-# External database (used when persistence.driver is "db")
+# CORS
 # =============================================================================
-externalDatabase:
-  # -- Database driver: pgsql or mysql
-  driver: pgsql
-  host: ""
-  port: 5432
-  database: buggregator
-  username: buggregator
-  password: ""
-  # -- Use existing secret for database password (key: db-password)
-  existingSecret: ""
+cors:
+  # -- Comma-separated list of allowed CORS origins
+  origins: "*"
 
 # =============================================================================
-# Authentication / SSO
+# Authentication / SSO (OAuth2/OIDC)
 # =============================================================================
 auth:
   # -- Enable SSO authentication
   enabled: false
-  # -- Auth provider: auth0 or kinde
-  provider: auth0
+  # -- Auth provider: auth0, google, github, keycloak, gitlab, oidc
+  provider: oidc
   # -- Provider URL (e.g. https://your-tenant.auth0.com)
   providerUrl: ""
   # -- OAuth client ID
   clientId: ""
   # -- OAuth client secret
   clientSecret: ""
-  # -- OAuth callback URL (auto-detected from ingress if empty)
+  # -- OAuth callback URL (e.g. https://buggregator.example.com/auth/sso/callback)
   callbackUrl: ""
   # -- OAuth scopes
   scopes: "openid,email,profile"
-  # -- Use existing secret for auth credentials (keys: client-id, client-secret)
+  # -- JWT secret for signing internal session tokens (required when auth is enabled)
+  jwtSecret: ""
+  # -- Use existing secret for auth credentials (keys: client-id, client-secret, jwt-secret)
   existingSecret: ""
 
 # =============================================================================
-# RoadRunner configuration
+# MCP (Model Context Protocol) for AI assistants
 # =============================================================================
-roadrunner:
-  http:
-    # -- Number of HTTP workers
-    numWorkers: 2
-  jobs:
-    # -- Number of job queue workers
-    numWorkers: 2
-  centrifuge:
-    # -- Number of Centrifugo proxy workers
-    numWorkers: 2
-
-  # -- RoadRunner log level: error, warn, info, debug
-  logLevel: warn
-  # -- Log encoding: json or console
-  logEncoding: json
-  # -- Log mode: production, development, raw
-  logMode: production
-
-  cors:
-    # -- CORS allowed origins
-    allowedOrigin: "*"
-    # -- CORS allowed headers
-    allowedHeaders: "*"
-    # -- CORS allow credentials
-    allowCredentials: true
+mcp:
+  # -- Enable MCP server
+  enabled: false
+  # -- Transport: "socket" or "http"
+  transport: socket
+  # -- Unix socket path (for socket transport)
+  socketPath: /tmp/buggregator-mcp.sock
+  # -- HTTP listen address (for http transport)
+  addr: ":8001"
+  # -- Bearer token for HTTP transport auth (optional)
+  authToken: ""
 
 # =============================================================================
 # Supported event types
@@ -106,7 +83,7 @@ supportedEvents: "http-dump,inspector,monolog,profiler,ray,sentry,sms,smtp,var-d
 # =============================================================================
 service:
   type: ClusterIP
-  # -- Main web UI port
+  # -- Main web UI + HTTP API port
   httpPort: 8000
   # -- SMTP server port for email capture
   smtpPort: 1025
@@ -114,10 +91,6 @@ service:
   varDumperPort: 9912
   # -- Monolog server port
   monologPort: 9913
-  # -- XHProf profiler server port
-  profilerPort: 9914
-  # -- Prometheus metrics port
-  metricsPort: 2112
 
 # =============================================================================
 # Ingress
@@ -139,10 +112,10 @@ ingress:
   #      - buggregator.local
 
 # =============================================================================
-# Storage (PVC for runtime data: attachments, profiles)
+# Storage (PVC for persistent data: SQLite DB, attachments)
 # =============================================================================
 storage:
-  # -- Enable persistent storage for runtime data
+  # -- Enable persistent storage
   enabled: true
   # -- Storage class (empty for default)
   storageClassName: ""
@@ -151,6 +124,24 @@ storage:
   # -- Access modes
   accessModes:
     - ReadWriteOnce
+
+# =============================================================================
+# Prometheus metrics
+# =============================================================================
+metrics:
+  # -- Enable Prometheus metrics
+  enabled: false
+  # -- Separate metrics server address (e.g. ":9090"). Empty = serve /metrics on main HTTP server
+  addr: ""
+  # -- Enable Prometheus ServiceMonitor
+  serviceMonitor:
+    enabled: false
+    # -- ServiceMonitor namespace (defaults to release namespace)
+    namespace: ""
+    # -- Additional labels for ServiceMonitor
+    labels: {}
+    # -- Scrape interval
+    interval: 30s
 
 # =============================================================================
 # Service account
@@ -189,17 +180,3 @@ resources: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
-
-# =============================================================================
-# Prometheus ServiceMonitor
-# =============================================================================
-metrics:
-  # -- Enable Prometheus ServiceMonitor
-  serviceMonitor:
-    enabled: false
-    # -- ServiceMonitor namespace (defaults to release namespace)
-    namespace: ""
-    # -- Additional labels for ServiceMonitor
-    labels: {}
-    # -- Scrape interval
-    interval: 30s

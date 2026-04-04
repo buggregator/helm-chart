@@ -41,7 +41,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 8082
+              containerPort: 8000
               protocol: TCP
             - name: smtp
               containerPort: 1025
@@ -52,90 +52,65 @@ spec:
             - name: monolog
               containerPort: 9913
               protocol: TCP
-            - name: profiler
-              containerPort: 9914
-              protocol: TCP
+            {{- if and .Values.metrics.enabled .Values.metrics.addr }}
             - name: metrics
-              containerPort: 2112
+              containerPort: {{ (split ":" .Values.metrics.addr)._1 | default 9090 }}
               protocol: TCP
+            {{- end }}
+            {{- if and .Values.mcp.enabled (eq .Values.mcp.transport "http") }}
+            - name: mcp
+              containerPort: {{ (split ":" .Values.mcp.addr)._1 | default 8001 }}
+              protocol: TCP
+            {{- end }}
           env:
-            # --- Application ---
-            - name: APP_ENV
-              value: {{ .Values.app.env | quote }}
-            - name: DEBUG
-              value: {{ .Values.app.debug | quote }}
-            - name: ENCRYPTER_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "buggregator.secretName" . }}
-                  key: encrypter-key
+            # --- Database ---
+            - name: DATABASE_DSN
+              value: {{ .Values.database.dsn | quote }}
 
-            # --- Persistence ---
-            - name: PERSISTENCE_DRIVER
-              value: {{ .Values.persistence.driver | quote }}
-
-            {{- if eq .Values.persistence.driver "db" }}
-            # --- External Database ---
-            - name: DB_DRIVER
-              value: {{ .Values.externalDatabase.driver | quote }}
-            - name: DB_HOST
-              value: {{ .Values.externalDatabase.host | quote }}
-            - name: DB_PORT
-              value: {{ .Values.externalDatabase.port | quote }}
-            - name: DB_DATABASE
-              value: {{ .Values.externalDatabase.database | quote }}
-            - name: DB_USERNAME
-              value: {{ .Values.externalDatabase.username | quote }}
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "buggregator.databaseSecretName" . }}
-                  key: db-password
+            # --- Attachment Storage ---
+            - name: STORAGE_MODE
+              value: {{ .Values.attachmentStorage.mode | quote }}
+            {{- if eq .Values.attachmentStorage.mode "filesystem" }}
+            - name: STORAGE_PATH
+              value: {{ .Values.attachmentStorage.path | quote }}
             {{- end }}
 
-            # --- RoadRunner ---
-            - name: RR_HTTP_NUM_WORKERS
-              value: {{ .Values.roadrunner.http.numWorkers | quote }}
-            - name: RR_JOBS_NUM_WORKERS
-              value: {{ .Values.roadrunner.jobs.numWorkers | quote }}
-            - name: RR_CENTRIFUGE_NUM_WORKERS
-              value: {{ .Values.roadrunner.centrifuge.numWorkers | quote }}
-            - name: RR_LOG_LEVEL
-              value: {{ .Values.roadrunner.logLevel | quote }}
-            - name: RR_LOG_ENCODING
-              value: {{ .Values.roadrunner.logEncoding | quote }}
-            - name: RR_LOG_MODE
-              value: {{ .Values.roadrunner.logMode | quote }}
-            - name: RR_HTTP_ALLOWED_ORIGIN
-              value: {{ .Values.roadrunner.cors.allowedOrigin | quote }}
-            - name: RR_HTTP_ALLOWED_HEADERS
-              value: {{ .Values.roadrunner.cors.allowedHeaders | quote }}
-            - name: RR_HTTP_ALLOW_CREDENTIALS
-              value: {{ .Values.roadrunner.cors.allowCredentials | quote }}
-
-            # --- Broadcasting & Queue ---
-            - name: BROADCAST_CONNECTION
-              value: centrifugo
-            - name: QUEUE_CONNECTION
-              value: roadrunner
-            - name: MONOLOG_DEFAULT_CHANNEL
-              value: roadrunner
-            - name: MONOLOG_DEFAULT_LEVEL
-              value: ERROR
-
-            # --- Centrifugo ---
-            - name: RR_CENTRIFUGE_PROXY_ADDRESS
-              value: "tcp://127.0.0.1:10001"
-            - name: RR_CENTRIFUGE_GRPC_API_ADDRESS
-              value: "127.0.0.1:10000"
+            # --- CORS ---
+            - name: CORS_ORIGINS
+              value: {{ .Values.cors.origins | quote }}
 
             # --- Events ---
             - name: CLIENT_SUPPORTED_EVENTS
               value: {{ .Values.supportedEvents | quote }}
 
             # --- Metrics ---
-            - name: METRICS_DRIVER
-              value: roadrunner
+            {{- if .Values.metrics.enabled }}
+            - name: METRICS_ENABLED
+              value: "true"
+            {{- if .Values.metrics.addr }}
+            - name: METRICS_ADDR
+              value: {{ .Values.metrics.addr | quote }}
+            {{- end }}
+            {{- end }}
+
+            # --- MCP ---
+            {{- if .Values.mcp.enabled }}
+            - name: MCP_ENABLED
+              value: "true"
+            - name: MCP_TRANSPORT
+              value: {{ .Values.mcp.transport | quote }}
+            {{- if eq .Values.mcp.transport "socket" }}
+            - name: MCP_SOCKET_PATH
+              value: {{ .Values.mcp.socketPath | quote }}
+            {{- else }}
+            - name: MCP_ADDR
+              value: {{ .Values.mcp.addr | quote }}
+            {{- if .Values.mcp.authToken }}
+            - name: MCP_AUTH_TOKEN
+              value: {{ .Values.mcp.authToken | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
 
             # --- Auth / SSO ---
             - name: AUTH_ENABLED
@@ -155,6 +130,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "buggregator.authSecretName" . }}
                   key: client-secret
+            - name: AUTH_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "buggregator.authSecretName" . }}
+                  key: jwt-secret
             - name: AUTH_CALLBACK_URL
               value: {{ .Values.auth.callbackUrl | quote }}
             - name: AUTH_SCOPES
@@ -163,25 +143,25 @@ spec:
 
           livenessProbe:
             httpGet:
-              path: /
+              path: /api/settings
               port: http
-            initialDelaySeconds: 30
+            initialDelaySeconds: 5
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /
+              path: /api/settings
               port: http
-            initialDelaySeconds: 10
+            initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
           {{- if .Values.storage.enabled }}
           volumeMounts:
-            - name: runtime
-              mountPath: /app/runtime
+            - name: data
+              mountPath: /data
           {{- end }}
 
           {{- with .Values.resources }}
@@ -191,9 +171,9 @@ spec:
 
       {{- if .Values.storage.enabled }}
       volumes:
-        - name: runtime
+        - name: data
           persistentVolumeClaim:
-            claimName: {{ include "buggregator.fullname" . }}-runtime
+            claimName: {{ include "buggregator.fullname" . }}-data
       {{- end }}
 
       {{- with .Values.nodeSelector }}

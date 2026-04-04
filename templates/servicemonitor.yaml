@@ -16,6 +16,12 @@ spec:
     matchLabels:
       {{- include "buggregator.selectorLabels" . | nindent 6 }}
   endpoints:
+    {{- if .Values.metrics.addr }}
     - port: metrics
       interval: {{ .Values.metrics.serviceMonitor.interval }}
+    {{- else }}
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+    {{- end }}
 {{- end }}

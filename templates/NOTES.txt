@@ -10,16 +10,23 @@ Buggregator has been deployed!
   Then open: http://localhost:{{ .Values.service.httpPort }}
 {{- end }}
 
-2. Debugging endpoints (configure your PHP app to send data to):
-   - Sentry DSN:  http://sentry@{{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.httpPort }}
+2. Configure your application to send data to:
+   - Sentry DSN:  http://sentry@{{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.httpPort }}/1
    - SMTP:        {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.smtpPort }}
    - VarDumper:   {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.varDumperPort }}
    - Monolog:     {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.monologPort }}
-   - Profiler:    {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.profilerPort }}
 
-3. Prometheus metrics: port {{ .Values.service.metricsPort }}
+{{- if .Values.metrics.enabled }}
+
+3. Prometheus metrics:
+{{- if .Values.metrics.addr }}
+   Separate metrics server on port {{ (split ":" .Values.metrics.addr)._1 | default 9090 }}
+{{- else }}
+   Available at /metrics on the main HTTP server (port {{ .Values.service.httpPort }})
+{{- end }}
 {{- if .Values.metrics.serviceMonitor.enabled }}
    ServiceMonitor is enabled — Prometheus will auto-discover the endpoint.
+{{- end }}
 {{- end }}
 
 {{- if .Values.auth.enabled }}
@@ -27,13 +34,17 @@ Buggregator has been deployed!
 4. SSO Authentication is enabled ({{ .Values.auth.provider }}).
 {{- end }}
 
-{{- if eq .Values.persistence.driver "db" }}
+{{- if .Values.mcp.enabled }}
 
-5. External database: {{ .Values.externalDatabase.driver }}://{{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}/{{ .Values.externalDatabase.database }}
-{{- else }}
+5. MCP server is enabled ({{ .Values.mcp.transport }} transport).
+{{- if eq .Values.mcp.transport "http" }}
+   MCP HTTP endpoint: port {{ (split ":" .Values.mcp.addr)._1 | default 8001 }}
+{{- end }}
+{{- end }}
 
-5. Using embedded Dolt database (in-memory/cache mode).
-   For production with multiple replicas, switch to an external database:
-     persistence.driver=db
-     externalDatabase.host=your-db-host
+Database: SQLite ({{ .Values.database.dsn }})
+{{- if eq .Values.database.dsn ":memory:" }}
+  WARNING: Using in-memory database — data will be lost on pod restart.
+  For persistence, set database.dsn to a file path (e.g., "/data/buggregator.db")
+  and enable storage (storage.enabled=true).
 {{- end }}

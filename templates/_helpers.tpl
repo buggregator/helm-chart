@@ -60,28 +60,6 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Secret name for app credentials
-*/}}
-{{- define "buggregator.secretName" -}}
-{{- if .Values.app.existingSecret }}
-{{- .Values.app.existingSecret }}
-{{- else }}
-{{- include "buggregator.fullname" . }}
-{{- end }}
-{{- end }}
-
-{{/*
-Secret name for database credentials
-*/}}
-{{- define "buggregator.databaseSecretName" -}}
-{{- if .Values.externalDatabase.existingSecret }}
-{{- .Values.externalDatabase.existingSecret }}
-{{- else }}
-{{- printf "%s-db" (include "buggregator.fullname" .) }}
-{{- end }}
-{{- end }}
-
-{{/*
 Secret name for auth credentials
 */}}
 {{- define "buggregator.authSecretName" -}}

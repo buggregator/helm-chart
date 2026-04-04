@@ -1,23 +1,17 @@
-# Example: Buggregator with external PostgreSQL database
+# Example: Buggregator with persistent SQLite database
 #
 # helm install buggregator ./helm-chart -f helm-chart/values-external-db.yaml
 
-persistence:
-  driver: db
+database:
+  dsn: /data/buggregator.db
 
-externalDatabase:
-  driver: pgsql
-  host: postgresql.database.svc
-  port: 5432
-  database: buggregator
-  username: buggregator
-  password: "change-me"
+attachmentStorage:
+  mode: filesystem
+  path: /data/storage
 
-roadrunner:
-  http:
-    numWorkers: 4
-  jobs:
-    numWorkers: 4
+storage:
+  enabled: true
+  size: 10Gi
 
 resources:
   requests:

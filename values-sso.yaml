@@ -1,17 +1,17 @@
-# Example: Buggregator with SSO (Auth0) and external database
+# Example: Buggregator with SSO (Auth0), persistent storage, and Ingress
 #
 # helm install buggregator ./helm-chart -f helm-chart/values-sso.yaml
 
-persistence:
-  driver: db
+database:
+  dsn: /data/buggregator.db
 
-externalDatabase:
-  driver: pgsql
-  host: postgresql.database.svc
-  port: 5432
-  database: buggregator
-  username: buggregator
-  password: "change-me"
+attachmentStorage:
+  mode: filesystem
+  path: /data/storage
+
+storage:
+  enabled: true
+  size: 10Gi
 
 auth:
   enabled: true
@@ -21,6 +21,7 @@ auth:
   clientSecret: "your-client-secret"
   callbackUrl: "https://buggregator.example.com/auth/sso/callback"
   scopes: "openid,email,profile"
+  jwtSecret: "change-me-to-a-random-string"
 
 ingress:
   enabled: true
@@ -37,8 +38,7 @@ ingress:
       hosts:
         - buggregator.example.com
 
-roadrunner:
-  http:
-    numWorkers: 4
-  jobs:
-    numWorkers: 4
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true

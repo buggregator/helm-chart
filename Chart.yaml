@@ -1,12 +1,11 @@
 apiVersion: v2
 name: buggregator
-description: A Helm chart for Buggregator — lightweight, self-hosted debugging server for PHP applications
+description: A Helm chart for Buggregator — lightweight, self-hosted debugging server. Single Go binary with embedded SQLite.
 type: application
-version: 0.1.0
-appVersion: "2025.1"
+version: 2.0.0
+appVersion: "2.0.0"
 keywords:
   - buggregator
-  - php
   - debugging
   - sentry
   - ray
@@ -14,6 +13,7 @@ keywords:
   - vardumper
   - monolog
   - smtp
+  - go
 home: https://buggregator.dev
 sources:
   - https://github.com/buggregator/server

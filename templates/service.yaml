@@ -23,13 +23,11 @@ spec:
       targetPort: monolog
       protocol: TCP
       name: monolog
-    - port: {{ .Values.service.profilerPort }}
-      targetPort: profiler
-      protocol: TCP
-      name: profiler
-    - port: {{ .Values.service.metricsPort }}
+    {{- if and .Values.metrics.enabled .Values.metrics.addr }}
+    - port: {{ (split ":" .Values.metrics.addr)._1 | default 9090 }}
       targetPort: metrics
       protocol: TCP
       name: metrics
+    {{- end }}
   selector:
     {{- include "buggregator.selectorLabels" . | nindent 4 }}
