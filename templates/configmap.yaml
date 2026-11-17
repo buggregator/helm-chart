@@ -1,0 +1,11 @@
+{{- if .Values.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "buggregator.fullname" . }}-config
+  labels:
+    {{- include "buggregator.labels" . | nindent 4 }}
+data:
+  buggregator.yaml: |
+    {{- toYaml .Values.config | nindent 4 }}
+{{- end }}

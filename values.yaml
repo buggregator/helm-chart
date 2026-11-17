@@ -19,6 +19,8 @@ database:
   # -- SQLite DSN. Empty: /data/buggregator.db when storage.enabled, else
   # ":memory:" (data lost on every restart).
   dsn: ""
+  # -- SQLite connection pool size (server default when empty)
+  maxOpenConns: ""
 
 # =============================================================================
 # Attachment storage (SMTP attachments, HTTP dump files)
@@ -29,6 +31,29 @@ attachmentStorage:
   mode: ""
   # -- Directory for filesystem mode (relative to working dir or absolute path)
   path: /data/storage
+
+# =============================================================================
+# Retention: old events are deleted (pinned ones are kept)
+# =============================================================================
+retention:
+  # -- Delete events older than this, e.g. "24h", "7d". Empty = keep forever
+  maxAge: ""
+  # -- Keep at most this many events in total. Empty or 0 = no cap
+  maxEvents: ""
+
+# =============================================================================
+# Server configuration file (buggregator.yaml)
+# =============================================================================
+# -- Contents of buggregator.yaml, for what has no value here: projects,
+# webhooks, mock rules... Mounted as a ConfigMap and passed with --config.
+# Environment variables set by this chart take precedence over the file.
+config: {}
+  # projects:
+  #   - key: shop
+  #     name: Shop backend
+  # webhooks:
+  #   - event: sentry
+  #     url: https://hooks.example.com/buggregator
 
 # =============================================================================
 # CORS
@@ -75,6 +100,10 @@ mcp:
   addr: ":8001"
   # -- Bearer token for HTTP transport auth (optional)
   authToken: ""
+  # -- Take the token from an existing secret instead
+  existingSecret: ""
+  # -- Key of the token in that secret
+  existingSecretKey: mcp-auth-token
 
 # =============================================================================
 # Supported event types
@@ -82,6 +111,71 @@ mcp:
 # -- Comma-separated list of enabled event types. Empty = all of them
 # (http-dump, inspector, monolog, profiler, ray, sentry, sms, smtp, var-dump, xdebug-trace)
 supportedEvents: ""
+
+# =============================================================================
+# UI event lists
+# =============================================================================
+ui:
+  # -- Events returned without a limit param. Empty or 0 = unlimited
+  defaultLimit: ""
+  # -- Ceiling for an explicit limit (server default 5000). 0 = no ceiling
+  maxLimit: ""
+  # -- Default time window, e.g. "1h", "24h", "7d". Empty = none
+  defaultWindow: ""
+
+# =============================================================================
+# Sentry
+# =============================================================================
+sentry:
+  # -- Fetch JS source files for stack frames: private (default), any or off
+  sourceFetch: ""
+
+# =============================================================================
+# New-version check and update from the UI
+# =============================================================================
+update:
+  # -- Ask GitHub for the newest release and show a notice (server default true)
+  checkEnabled: null
+  # -- How often to check, e.g. "12h" (minimum 1h)
+  checkInterval: ""
+  # -- Update from the UI: auto, on or off. In Kubernetes "auto" never replaces
+  # the binary: it shows the helm upgrade command instead.
+  selfUpdate: ""
+
+# =============================================================================
+# Xdebug proxy (DBGp) and uploaded Xdebug traces
+# =============================================================================
+xdebug:
+  # -- Start the Xdebug proxy on port 9003 (listens on all interfaces in the pod)
+  enabled: false
+  # -- Where the IDE listens, e.g. "host.example.com:9004" (server default 127.0.0.1:9004)
+  ideAddr: ""
+  # -- proxy, auto or standalone (server default auto)
+  mode: ""
+  # -- Release a paused session after this long without a command, e.g. "10m"; "0" = never
+  idleTimeout: ""
+  # -- Expose the xdebug_eval MCP tool
+  allowEval: null
+  # -- Expose the MCP control tools: step, continue, stop, wait (server default true)
+  allowControl: null
+  # -- A session driven here stops at the first line
+  pauseOnFirstLine: null
+
+xdebugTrace:
+  # -- Largest accepted upload, e.g. "100MB"
+  maxUpload: ""
+  # -- Largest trace kept after unpacking, e.g. "256MB"
+  maxSize: ""
+  # -- How many traces to keep (server default 20)
+  keep: ""
+
+# =============================================================================
+# Extra environment
+# =============================================================================
+# -- Extra env vars for the container (list of {name, value} or valueFrom)
+extraEnv: []
+# -- envFrom sources (ConfigMaps or Secrets)
+envFrom: []
 
 # =============================================================================
 # Service ports
@@ -96,6 +190,30 @@ service:
   varDumperPort: 9912
   # -- Monolog server port
   monologPort: 9913
+  # -- HTTP proxy port (records requests sent through it)
+  proxyPort: 8080
+  # -- Xdebug proxy port (only with xdebug.enabled)
+  xdebugPort: 9003
+  # -- Annotations for the Service
+  annotations: {}
+
+# -- A second Service for the TCP ports (SMTP, VarDumper, Monolog, Xdebug):
+# an Ingress carries only HTTP, so expose these with a LoadBalancer or NodePort
+# to reach them from outside the cluster.
+# These ports have no authentication. On most clouds a LoadBalancer gets a
+# public IP: limit who can connect, e.g.
+#   extraSpec:
+#     loadBalancerSourceRanges: ["203.0.113.0/24"]
+# or make it an internal load balancer with your cloud's annotation.
+tcpService:
+  enabled: false
+  type: LoadBalancer
+  # -- Also expose the HTTP proxy (8080). It forwards any request, HTTPS
+  # included, without authentication: on a public IP anyone can use it.
+  proxy: false
+  annotations: {}
+  # -- loadBalancerIP / externalTrafficPolicy and the like, passed as is
+  extraSpec: {}
 
 # =============================================================================
 # Ingress
@@ -104,8 +222,11 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
-    # kubernetes.io/ingress.class: nginx
     # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # The UI keeps a WebSocket open (/connection/websocket); ingress-nginx
+    # closes idle ones after 60s by default:
+    # nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    # nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
   hosts:
     - host: buggregator.local
       paths:
@@ -154,7 +275,8 @@ metrics:
 # =============================================================================
 serviceAccount:
   create: true
-  automount: true
+  # -- The server does not call the Kubernetes API
+  automount: false
   annotations: {}
   name: ""
 
@@ -164,24 +286,38 @@ serviceAccount:
 podAnnotations: {}
 podLabels: {}
 
-podSecurityContext: {}
-  # fsGroup: 2000
+# -- Runs as a non-root user; fsGroup makes the volume writable for it
+# (files written by older root-run releases included).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
 
-securityContext: {}
-  # capabilities:
-  #   drop:
-  #   - ALL
-  # readOnlyRootFilesystem: true
-  # runAsNonRoot: true
-  # runAsUser: 1000
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
-resources: {}
-  # limits:
-  #   cpu: 500m
-  #   memory: 512Mi
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
+# -- An init container that gives /data to the pod's user once (chown) before
+# the server starts. Needed only where the volume plugin ignores fsGroup
+# (hostPath, local-path, many NFS setups) and the data was written by a
+# release that ran as root (chart 2.x). It runs as root with CHOWN, FOWNER and
+# DAC_OVERRIDE, so clusters with the "restricted" Pod Security level reject it.
+volumePermissions:
+  enabled: false
+
+# -- No limits by default: memory grows with the in-memory attachment store
+# and big payloads. Set them for your load.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
 
 nodeSelector: {}
 tolerations: []

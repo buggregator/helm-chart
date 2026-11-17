@@ -30,12 +30,14 @@ helm-chart/
 
 ## Key Architecture Details
 
-- **Container ports**: 8000 (HTTP/WebSocket), 1025 (SMTP), 9912 (VarDumper), 9913 (Monolog)
+- **Container ports**: 8000 (HTTP/WebSocket), 1025 (SMTP), 9912 (VarDumper), 9913 (Monolog), 8080 (HTTP proxy), 9003 (Xdebug, when enabled)
+- **Optional env**: rendered by one loop in deployment.yaml only when set (null/"" skipped), so `config` (buggregator.yaml ConfigMap) can drive the same settings; `ci/full-values.yaml` turns every option on
+- **Security**: non-root 65532, fsGroup, readOnlyRootFilesystem; `/tmp` emptyDir is required (VarDumper parser runs from there)
 - **Single binary**: The Go binary serves HTTP, WebSocket, and the embedded SPA frontend directly on port 8000
 - **Database**: Embedded SQLite at `/data/buggregator.db` on the PVC by default; `:memory:` only with `storage.enabled=false`
 - **One replica, Recreate**: SQLite has one writer and the volume is RWO; `replicaCount` other than 1 fails to render
 - **Publishing**: tag `vX.Y.Z` (= Chart.yaml `version`) → `.github/workflows/release.yml` pushes `oci://ghcr.io/buggregator/helm-chart/buggregator:X.Y.Z` (the URL the docs and the server's update hint use)
-- **Health checks**: HTTP GET on `/api/settings` port 8000 (public endpoint, no auth required)
+- **Health checks**: startup/liveness/readiness on `/api/version` port 8000 (public)
 - **Secrets**: Only auth secret (client-id, client-secret, jwt-secret) when SSO is enabled
 - **Storage**: `/data` for SQLite database file and filesystem attachments
 

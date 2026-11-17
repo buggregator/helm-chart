@@ -112,3 +112,4 @@ secret (so sessions survive helm upgrade), else a new random one.
 {{- end }}
 {{- end }}
 {{- end }}
+
