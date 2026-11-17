@@ -50,6 +50,10 @@ Buggregator has been deployed!
 {{- end }}
 
 Database: SQLite ({{ include "buggregator.databaseDsn" . }})
+{{- if and .Values.storage.enabled (ne (toString .Values.storage.keepOnUninstall) "false") }}
+  The volume {{ include "buggregator.fullname" . }}-data stays after "helm uninstall";
+  delete it with: kubectl delete pvc {{ include "buggregator.fullname" . }}-data -n {{ .Release.Namespace }}
+{{- end }}
 {{- if eq (include "buggregator.databaseDsn" .) ":memory:" }}
   WARNING: in-memory database — data is lost on every pod restart.
   Keep storage.enabled=true (the default) to store it on the volume.

@@ -150,6 +150,7 @@ ingress:
 | `storage.enabled` | PVC at `/data` | `true` |
 | `storage.size` | PVC size | `5Gi` |
 | `storage.storageClassName` | Storage class | `""` (cluster default) |
+| `storage.keepOnUninstall` | Keep the PVC on `helm uninstall` | `true` |
 | `database.maxOpenConns` | SQLite connection pool size | server default |
 | `retention.maxAge` | Delete events older than this (`24h`, `7d`) | keep |
 | `retention.maxEvents` | Keep at most this many events | no cap |
@@ -192,7 +193,13 @@ See [`values.yaml`](values.yaml) for every option.
 helm uninstall buggregator
 ```
 
-The PVC is deleted with the release. Back up `/data/buggregator.db` first if you need it.
+The data PVC stays (`storage.keepOnUninstall: true`, the default): installing again with the same release name and namespace picks up the old events. To delete the data too:
+
+```bash
+kubectl delete pvc buggregator-data
+```
+
+(the name is `<release>-buggregator-data`, or `<release>-data` when the release name contains `buggregator`; `kubectl get pvc` lists it). With `storage.keepOnUninstall=false` the PVC is deleted with the release.
 
 ## Releases
 
