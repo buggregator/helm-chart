@@ -34,7 +34,7 @@ The pod is replaced with the `Recreate` strategy: the old pod stops before the n
 
 **From chart 2.x installed with Helm 4.** Chart 2.x used the RollingUpdate strategy, and Helm 4's server-side apply cannot remove its leftover settings, so the first upgrade fails with `spec.strategy.rollingUpdate: Forbidden`. Run that first upgrade once with `--server-side=false`. Releases installed with Helm 3 upgrade as is.
 
-**From chart 2.x with `--reuse-values`.** The old values come along: `database.dsn: ":memory:"`, `attachmentStorage.mode: memory` and a `supportedEvents` list without `xdebug-trace`, so the data would stay in memory. Take the new defaults on that upgrade:
+**From chart 2.x with `--reuse-values`.** Values you set yourself come along (Helm keeps those, not the old chart's defaults). If you had set `database.dsn: ":memory:"`, `attachmentStorage.mode: memory` or a `supportedEvents` list (the old one had no `xdebug-trace`), clear them on that upgrade to take the new defaults (check with `helm get values buggregator`):
 
 ```bash
 helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reuse-values \
