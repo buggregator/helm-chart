@@ -5,6 +5,12 @@ metadata:
   name: {{ include "buggregator.fullname" . }}-data
   labels:
     {{- include "buggregator.labels" . | nindent 4 }}
+  {{- /* Missing on "helm upgrade --reuse-values" from older charts: keep by default. */}}
+  {{- if ne (toString .Values.storage.keepOnUninstall) "false" }}
+  annotations:
+    # helm uninstall leaves the volume (and the events on it) in place.
+    helm.sh/resource-policy: keep
+  {{- end }}
 spec:
   {{- if .Values.storage.storageClassName }}
   storageClassName: {{ .Values.storage.storageClassName | quote }}

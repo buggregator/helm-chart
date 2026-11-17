@@ -112,6 +112,24 @@ jobs:
           helm upgrade sso . --reuse-values
           after=$(kubectl get secret sso-buggregator-auth -o jsonpath='{.data.jwt-secret}')
           test -n "$before" && test "$before" = "$after"
+      - name: Data survives uninstall and reinstall
+        run: |
+          helm install keep . --wait --timeout 5m
+          kubectl port-forward svc/keep-buggregator 18002:8000 >/dev/null 2>&1 &
+          sleep 3
+          curl -fsS -X POST http://127.0.0.1:18002/ -H 'X-Buggregator-Event: http-dump' -d 'kept across uninstall'
+          kill %1
+          helm uninstall keep --wait
+          kubectl get pvc keep-buggregator-data
+          helm install keep . --wait --timeout 5m
+          kubectl port-forward svc/keep-buggregator 18002:8000 >/dev/null 2>&1 &
+          sleep 3
+          curl -fsS 'http://127.0.0.1:18002/api/events?type=http-dump' | grep -q 'kept across uninstall'
+          kill %1
+          # Opted out: the PVC goes with the release.
+          helm upgrade keep . --set storage.keepOnUninstall=false --wait --timeout 5m
+          helm uninstall keep --wait
+          kubectl wait --for=delete pvc/keep-buggregator-data --timeout=60s
       - name: Diagnostics
         if: failure()
         run: |

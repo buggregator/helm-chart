@@ -251,6 +251,10 @@ storage:
   # -- Access modes
   accessModes:
     - ReadWriteOnce
+  # -- Keep the PVC on "helm uninstall" (helm.sh/resource-policy: keep): a later
+  # install with the same release name and namespace picks the data up again.
+  # Delete it yourself with kubectl delete pvc <release>-buggregator-data.
+  keepOnUninstall: true
 
 # =============================================================================
 # Prometheus metrics
