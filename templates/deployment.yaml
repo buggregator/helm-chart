@@ -13,15 +13,19 @@ spec:
   # ReadWriteOnce volume.
   strategy:
     type: Recreate
+    # Clears the rollingUpdate block an older RollingUpdate release left in the
+    # live object; Kubernetes rejects it next to Recreate.
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "buggregator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
-        # Restart on a change of the auth values, not on the secret itself:
-        # the generated JWT secret must not restart the pod on every upgrade.
-        checksum/auth: {{ omit .Values.auth "jwtSecret" | toJson | sha256sum }}
+        # Restart on a change of the auth values, not on the rendered secret:
+        # a generated JWT secret (jwtSecret "") must not restart the pod on
+        # every upgrade; an explicit one changes the checksum.
+        checksum/auth: {{ .Values.auth | toJson | sha256sum }}
         {{- if .Values.config }}
         checksum/config: {{ toYaml .Values.config | sha256sum }}
         {{- end }}
