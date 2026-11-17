@@ -4,6 +4,10 @@ metadata:
   name: {{ include "buggregator.fullname" . }}
   labels:
     {{- include "buggregator.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -23,11 +27,27 @@ spec:
       targetPort: monolog
       protocol: TCP
       name: monolog
+    - port: {{ .Values.service.proxyPort }}
+      targetPort: proxy
+      protocol: TCP
+      name: proxy
+    {{- if .Values.xdebug.enabled }}
+    - port: {{ .Values.service.xdebugPort }}
+      targetPort: xdebug
+      protocol: TCP
+      name: xdebug
+    {{- end }}
     {{- if and .Values.metrics.enabled .Values.metrics.addr }}
     - port: {{ (split ":" .Values.metrics.addr)._1 | default 9090 }}
       targetPort: metrics
       protocol: TCP
       name: metrics
+    {{- end }}
+    {{- if and .Values.mcp.enabled (eq .Values.mcp.transport "http") }}
+    - port: {{ (split ":" .Values.mcp.addr)._1 | default 8001 }}
+      targetPort: mcp
+      protocol: TCP
+      name: mcp
     {{- end }}
   selector:
     {{- include "buggregator.selectorLabels" . | nindent 4 }}

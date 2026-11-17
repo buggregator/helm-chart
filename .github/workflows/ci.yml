@@ -15,6 +15,7 @@ jobs:
         run: |
           helm lint . --strict
           helm lint . --strict -f values-sso.yaml
+          helm lint . --strict -f ci/full-values.yaml
       - name: Render guards
         run: |
           # Data on the volume by default.
@@ -22,6 +23,11 @@ jobs:
           helm template t . | grep -q 'type: Recreate'
           # Memory only when the volume is off.
           helm template t . --set storage.enabled=false | grep -A1 'name: DATABASE_DSN' | grep -q ':memory:'
+          # Non-root, read-only root filesystem by default.
+          helm template t . | grep -q 'runAsNonRoot: true'
+          helm template t . | grep -q 'readOnlyRootFilesystem: true'
+          # Large numbers stay integers (1000000, not 1e+06).
+          helm template t . -f ci/full-values.yaml | grep -A1 RETENTION_MAX_EVENTS | grep -q '"1000000"'
           # More than one replica must not render.
           if helm template t . --set replicaCount=2 >/dev/null 2>&1; then echo "replicaCount=2 rendered"; exit 1; fi
 
@@ -45,6 +51,15 @@ jobs:
           kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
           sleep 3
           curl -fsS 'http://127.0.0.1:18000/api/events?type=http-dump' | grep -q 'kept across upgrade'
+      - name: Every option on
+        run: |
+          helm install full . -f ci/full-values.yaml --wait --timeout 5m
+          kubectl port-forward svc/full-buggregator 18001:8000 >/dev/null 2>&1 &
+          sleep 3
+          # The project from the config file (ConfigMap + --config).
+          curl -fsS http://127.0.0.1:18001/api/projects | grep -q '"shop"'
+          # The pod runs as the non-root user.
+          test "$(kubectl exec deploy/full-buggregator -- id -u)" = "65532"
       - name: JWT secret survives upgrade
         run: |
           helm install sso . --set storage.enabled=false --set auth.enabled=true \

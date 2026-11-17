@@ -1,0 +1,42 @@
+{{- if .Values.tcpService.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "buggregator.fullname" . }}-tcp
+  labels:
+    {{- include "buggregator.labels" . | nindent 4 }}
+  {{- with .Values.tcpService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.tcpService.type }}
+  {{- with .Values.tcpService.extraSpec }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+  ports:
+    - port: {{ .Values.service.smtpPort }}
+      targetPort: smtp
+      protocol: TCP
+      name: smtp
+    - port: {{ .Values.service.varDumperPort }}
+      targetPort: var-dumper
+      protocol: TCP
+      name: var-dumper
+    - port: {{ .Values.service.monologPort }}
+      targetPort: monolog
+      protocol: TCP
+      name: monolog
+    - port: {{ .Values.service.proxyPort }}
+      targetPort: proxy
+      protocol: TCP
+      name: proxy
+    {{- if .Values.xdebug.enabled }}
+    - port: {{ .Values.service.xdebugPort }}
+      targetPort: xdebug
+      protocol: TCP
+      name: xdebug
+    {{- end }}
+  selector:
+    {{- include "buggregator.selectorLabels" . | nindent 4 }}
+{{- end }}

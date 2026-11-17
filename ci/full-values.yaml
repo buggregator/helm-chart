@@ -1,0 +1,17 @@
+# Every optional part on: used by CI for lint and the kind install test.
+retention: {maxAge: 7d, maxEvents: 1000000}
+sentry: {sourceFetch: "off"}
+update: {checkEnabled: false, selfUpdate: "off"}
+ui: {defaultWindow: 24h, maxLimit: 0}
+xdebug: {enabled: true, mode: standalone}
+xdebugTrace: {keep: 5}
+mcp: {enabled: true, transport: http, authToken: ci-token}
+metrics: {enabled: true, addr: ":9090"}
+tcpService: {enabled: true, type: ClusterIP}
+config:
+  projects:
+    - key: shop
+      name: Shop backend
+extraEnv:
+  - name: CI_MARKER
+    value: "1"

@@ -22,6 +22,9 @@ spec:
         # Restart on a change of the auth values, not on the secret itself:
         # the generated JWT secret must not restart the pod on every upgrade.
         checksum/auth: {{ omit .Values.auth "jwtSecret" | toJson | sha256sum }}
+        {{- if .Values.config }}
+        checksum/config: {{ toYaml .Values.config | sha256sum }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -36,6 +39,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "buggregator.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -48,6 +52,9 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.config }}
+          args: ["--config", "/etc/buggregator/buggregator.yaml"]
+          {{- end }}
           ports:
             - name: http
               containerPort: 8000
@@ -61,6 +68,14 @@ spec:
             - name: monolog
               containerPort: 9913
               protocol: TCP
+            - name: proxy
+              containerPort: 8080
+              protocol: TCP
+            {{- if .Values.xdebug.enabled }}
+            - name: xdebug
+              containerPort: 9003
+              protocol: TCP
+            {{- end }}
             {{- if and .Values.metrics.enabled .Values.metrics.addr }}
             - name: metrics
               containerPort: {{ (split ":" .Values.metrics.addr)._1 | default 9090 }}
@@ -72,11 +87,8 @@ spec:
               protocol: TCP
             {{- end }}
           env:
-            # --- Database ---
             - name: DATABASE_DSN
               value: {{ include "buggregator.databaseDsn" . | quote }}
-
-            # --- Attachment Storage ---
             - name: STORAGE_MODE
               value: {{ include "buggregator.attachmentMode" . | quote }}
             {{- if eq (include "buggregator.attachmentMode" .) "filesystem" }}
@@ -84,25 +96,56 @@ spec:
               value: {{ .Values.attachmentStorage.path | quote }}
             {{- end }}
 
-            # --- CORS ---
-            - name: CORS_ORIGINS
-              value: {{ .Values.cors.origins | quote }}
+            {{- if .Values.xdebug.enabled }}
+            - name: XDEBUG_PROXY_ENABLED
+              value: "true"
+            - name: XDEBUG_PROXY_ADDR
+              value: "0.0.0.0:9003"
+            {{- end }}
+            # Optional settings: rendered only when set; unset ones are left to
+            # the config file or the server default.
+            {{- $optional := list
+                (list "DATABASE_MAX_OPEN_CONNS" .Values.database.maxOpenConns)
+                (list "RETENTION_MAX_AGE" .Values.retention.maxAge)
+                (list "RETENTION_MAX_EVENTS" .Values.retention.maxEvents)
+                (list "CORS_ORIGINS" .Values.cors.origins)
+                (list "CLIENT_SUPPORTED_EVENTS" .Values.supportedEvents)
+                (list "UI_DEFAULT_LIMIT" .Values.ui.defaultLimit)
+                (list "UI_MAX_LIMIT" .Values.ui.maxLimit)
+                (list "UI_DEFAULT_WINDOW" .Values.ui.defaultWindow)
+                (list "SENTRY_SOURCE_FETCH" .Values.sentry.sourceFetch)
+                (list "UPDATE_CHECK_ENABLED" .Values.update.checkEnabled)
+                (list "UPDATE_CHECK_INTERVAL" .Values.update.checkInterval)
+                (list "UPDATE_SELF" .Values.update.selfUpdate)
+                (list "XDEBUG_TRACE_MAX_UPLOAD" .Values.xdebugTrace.maxUpload)
+                (list "XDEBUG_TRACE_MAX_SIZE" .Values.xdebugTrace.maxSize)
+                (list "XDEBUG_TRACE_KEEP" .Values.xdebugTrace.keep) }}
+            {{- if .Values.xdebug.enabled }}
+            {{- $optional = concat $optional (list
+                (list "XDEBUG_PROXY_IDE_ADDR" .Values.xdebug.ideAddr)
+                (list "XDEBUG_PROXY_MODE" .Values.xdebug.mode)
+                (list "XDEBUG_PROXY_IDLE_TIMEOUT" .Values.xdebug.idleTimeout)
+                (list "XDEBUG_PROXY_ALLOW_EVAL" .Values.xdebug.allowEval)
+                (list "XDEBUG_PROXY_ALLOW_CONTROL" .Values.xdebug.allowControl)
+                (list "XDEBUG_PROXY_PAUSE_ON_FIRST_LINE" .Values.xdebug.pauseOnFirstLine)) }}
+            {{- end }}
+            {{- if .Values.metrics.enabled }}
+            {{- $optional = append $optional (list "METRICS_ADDR" .Values.metrics.addr) }}
+            {{- end }}
+            {{- range $optional }}
+            {{- $v := index . 1 }}
+            {{- if kindIs "float64" $v }}{{- $v = int64 $v }}{{- end }}{{/* 1000000, not 1e+06 */}}
+            {{- if and (not (kindIs "invalid" $v)) (ne (toString $v) "") }}
+            - name: {{ index . 0 }}
+              value: {{ $v | toString | quote }}
+            {{- end }}
+            {{- end }}
 
-            # --- Events ---
-            - name: CLIENT_SUPPORTED_EVENTS
-              value: {{ .Values.supportedEvents | quote }}
-
-            # --- Metrics ---
             {{- if .Values.metrics.enabled }}
             - name: METRICS_ENABLED
               value: "true"
-            {{- if .Values.metrics.addr }}
-            - name: METRICS_ADDR
-              value: {{ .Values.metrics.addr | quote }}
-            {{- end }}
             {{- end }}
 
-            # --- MCP ---
             {{- if .Values.mcp.enabled }}
             - name: MCP_ENABLED
               value: "true"
@@ -114,14 +157,19 @@ spec:
             {{- else }}
             - name: MCP_ADDR
               value: {{ .Values.mcp.addr | quote }}
-            {{- if .Values.mcp.authToken }}
+            {{- if .Values.mcp.existingSecret }}
+            - name: MCP_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcp.existingSecret }}
+                  key: {{ .Values.mcp.existingSecretKey }}
+            {{- else if .Values.mcp.authToken }}
             - name: MCP_AUTH_TOKEN
               value: {{ .Values.mcp.authToken | quote }}
             {{- end }}
             {{- end }}
             {{- end }}
 
-            # --- Auth / SSO ---
             - name: AUTH_ENABLED
               value: {{ .Values.auth.enabled | quote }}
             {{- if .Values.auth.enabled }}
@@ -149,41 +197,70 @@ spec:
             - name: AUTH_SCOPES
               value: {{ .Values.auth.scopes | quote }}
             {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
+          startupProbe:
+            httpGet:
+              path: /api/version
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 5
+            # Up to 5 minutes for migrations on a big database.
+            failureThreshold: 60
           livenessProbe:
             httpGet:
-              path: /api/settings
+              path: /api/version
               port: http
-            initialDelaySeconds: 5
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /api/settings
+              path: /api/version
               port: http
-            initialDelaySeconds: 3
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
 
-          {{- if .Values.storage.enabled }}
           volumeMounts:
+            # The VarDumper parser is unpacked into /tmp and run from there; the
+            # MCP socket lives there too. Needed with readOnlyRootFilesystem.
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.storage.enabled }}
             - name: data
               mountPath: /data
-          {{- end }}
+            {{- end }}
+            {{- if .Values.config }}
+            - name: config
+              mountPath: /etc/buggregator
+              readOnly: true
+            {{- end }}
 
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
 
-      {{- if .Values.storage.enabled }}
       volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.storage.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ include "buggregator.fullname" . }}-data
-      {{- end }}
+        {{- end }}
+        {{- if .Values.config }}
+        - name: config
+          configMap:
+            name: {{ include "buggregator.fullname" . }}-config
+        {{- end }}
 
       {{- with .Values.nodeSelector }}
       nodeSelector:
