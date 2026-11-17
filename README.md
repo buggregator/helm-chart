@@ -27,7 +27,7 @@ A specific chart version: add `--version 3.0.0`. A specific server image: `--set
 ## Upgrade
 
 ```bash
-helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reuse-values
+helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reset-then-reuse-values
 ```
 
 The pod is replaced with the `Recreate` strategy: the old pod stops before the new one starts, because both would open the same SQLite file. Expect a few seconds of downtime.
@@ -36,10 +36,12 @@ The pod is replaced with the `Recreate` strategy: the old pod stops before the n
 
 **From chart 2.x installed with Helm 4.** Chart 2.x used the RollingUpdate strategy, and Helm 4's server-side apply cannot remove its leftover settings, so the first upgrade fails with `spec.strategy.rollingUpdate: Forbidden`. Run that first upgrade once with `--server-side=false`. Releases installed with Helm 3 upgrade as is.
 
-**From chart 2.x with `--reuse-values`.** Values you set yourself come along (Helm keeps those, not the old chart's defaults). If you had set `database.dsn: ":memory:"`, `attachmentStorage.mode: memory` or a `supportedEvents` list (the old one had no `xdebug-trace`), clear them on that upgrade to take the new defaults (check with `helm get values buggregator`):
+**Keep your values with `--reset-then-reuse-values`** (Helm 3.14+), not `--reuse-values`: the latter keeps the old chart's defaults too, and the new settings this chart adds are missing (the upgrade fails with `nil pointer evaluating interface {}.enabled`). `--reset-then-reuse-values` takes the new chart's defaults plus the values you set yourself.
+
+**From chart 2.x.** If you had set `database.dsn: ":memory:"`, `attachmentStorage.mode: memory` or a `supportedEvents` list (the old one had no `xdebug-trace`), clear them on that upgrade to take the new defaults (check with `helm get values buggregator`):
 
 ```bash
-helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reuse-values \
+helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reset-then-reuse-values \
   --set database.dsn= --set attachmentStorage.mode= --set supportedEvents=
 ```
 

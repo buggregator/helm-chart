@@ -80,11 +80,11 @@ jobs:
           kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
           sleep 3
           curl -fsS 'http://127.0.0.1:18000/api/events?type=http-dump' | grep -q 'kept across upgrade'
-      - name: Upgrade from 2.x with --reuse-values takes the new defaults
+      - name: Upgrade from 2.x with --reset-then-reuse-values takes the new defaults
         run: |
           ssa=""; [ "${{ matrix.helm }}" = "latest" ] && ssa="--server-side=false"
           helm install reuse ../old-chart
-          helm upgrade reuse . --reuse-values $ssa
+          helm upgrade reuse . --reset-then-reuse-values $ssa
           dsn=$(kubectl get deploy reuse-buggregator -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="DATABASE_DSN")].value}')
           echo "DATABASE_DSN=$dsn"
           test "$dsn" = "/data/buggregator.db"
