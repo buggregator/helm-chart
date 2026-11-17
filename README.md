@@ -5,7 +5,7 @@ Deploys [Buggregator](https://buggregator.dev) on Kubernetes: one Go binary with
 ## Prerequisites
 
 - Kubernetes 1.23+
-- Helm 3.8+ (OCI registries)
+- Helm 3.8+ (OCI registries); 3.14+ for `--reset-then-reuse-values` on upgrade
 - A default StorageClass, or `storage.storageClassName`
 
 ## Install
@@ -36,7 +36,7 @@ The pod is replaced with the `Recreate` strategy: the old pod stops before the n
 
 **From chart 2.x installed with Helm 4.** Chart 2.x used the RollingUpdate strategy, and Helm 4's server-side apply cannot remove its leftover settings, so the first upgrade fails with `spec.strategy.rollingUpdate: Forbidden`. Run that first upgrade once with `--server-side=false`. Releases installed with Helm 3 upgrade as is.
 
-**Keep your values with `--reset-then-reuse-values`** (Helm 3.14+), not `--reuse-values`: the latter keeps the old chart's defaults too, and the new settings this chart adds are missing (the upgrade fails with `nil pointer evaluating interface {}.enabled`). `--reset-then-reuse-values` takes the new chart's defaults plus the values you set yourself.
+**Keep your values with `--reset-then-reuse-values`** (Helm 3.14+). It takes this chart's defaults plus the values you set yourself. `--reuse-values` (the command the server's update notice shows) also works, but keeps the old chart's defaults: from 2.x that means data in memory (`:memory:`), running as root, none of the new settings. Switch with `--reset-then-reuse-values` once.
 
 **From chart 2.x.** If you had set `database.dsn: ":memory:"`, `attachmentStorage.mode: memory` or a `supportedEvents` list (the old one had no `xdebug-trace`), clear them on that upgrade to take the new defaults (check with `helm get values buggregator`):
 
@@ -116,7 +116,18 @@ Inside the cluster (release `buggregator`, namespace `default`):
 | HTTP proxy | `http://buggregator.default.svc:8080` |
 | Xdebug (with `xdebug.enabled`) | `buggregator.default.svc:9003` |
 
-An Ingress carries only HTTP (port 8000). SMTP, VarDumper, Monolog, the HTTP proxy and Xdebug are TCP: `tcpService.enabled=true` adds a second Service (`LoadBalancer` by default) with just those ports, so the web UI can stay behind the Ingress.
+An Ingress carries only HTTP (port 8000). SMTP, VarDumper, Monolog and Xdebug are TCP: `tcpService.enabled=true` adds a second Service (`LoadBalancer` by default) with just those ports, so the web UI can stay behind the Ingress.
+
+These ports have no authentication, and on most clouds a `LoadBalancer` gets a public IP. Limit who can connect, or use your cloud's internal load balancer annotation:
+
+```yaml
+tcpService:
+  enabled: true
+  extraSpec:
+    loadBalancerSourceRanges: ["203.0.113.0/24"]
+```
+
+The HTTP proxy (8080) is left out of this Service: it forwards any request, HTTPS included, so on a public IP anyone could send traffic through your cluster. Add it with `tcpService.proxy=true` only behind such a limit.
 
 Behind ingress-nginx, raise the timeouts for the UI's WebSocket (`/connection/websocket`), closed after 60 s by default:
 
@@ -166,7 +177,7 @@ ingress:
 | `service.type` | Service type | `ClusterIP` |
 | `service.httpPort`, `smtpPort`, `varDumperPort`, `monologPort`, `proxyPort`, `xdebugPort` | Service ports | `8000`, `1025`, `9912`, `9913`, `8080`, `9003` |
 | `service.annotations` | Service annotations | `{}` |
-| `tcpService.enabled`, `type`, `annotations`, `extraSpec` | Second Service for the TCP ports | off, `LoadBalancer` |
+| `tcpService.enabled`, `type`, `proxy`, `annotations`, `extraSpec` | Second Service for the TCP ports (no auth: limit access); `proxy` adds the HTTP proxy | off, `LoadBalancer`, `false` |
 | `ingress.*` | Ingress for the web UI | off |
 | `podSecurityContext`, `securityContext` | Non-root, read-only root filesystem (see Security) | set |
 | `volumePermissions.enabled` | Root init container that gives `/data` to the pod's user (upgrades from 2.x where fsGroup is ignored) | `false` |

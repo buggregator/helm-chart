@@ -1,6 +1,15 @@
 {{- if ne (int .Values.replicaCount) 1 }}
 {{- fail "replicaCount must be 1: Buggregator keeps its data in SQLite (one writer) on a ReadWriteOnce volume" }}
 {{- end }}
+{{- /* Keys added in chart 3.0 can be missing: "helm upgrade --reuse-values" from 2.x
+     (the command server 2.11 shows) renders with the old chart's values. */}}
+{{- $xdebug := .Values.xdebug | default dict }}
+{{- $xdebugTrace := .Values.xdebugTrace | default dict }}
+{{- $retention := .Values.retention | default dict }}
+{{- $ui := .Values.ui | default dict }}
+{{- $sentry := .Values.sentry | default dict }}
+{{- $update := .Values.update | default dict }}
+{{- $volumePermissions := .Values.volumePermissions | default dict }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,7 +57,7 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if and .Values.volumePermissions.enabled .Values.storage.enabled }}
+      {{- if and $volumePermissions.enabled .Values.storage.enabled }}
       initContainers:
         - name: volume-permissions
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -94,7 +103,7 @@ spec:
             - name: proxy
               containerPort: 8080
               protocol: TCP
-            {{- if .Values.xdebug.enabled }}
+            {{- if $xdebug.enabled }}
             - name: xdebug
               containerPort: 9003
               protocol: TCP
@@ -119,7 +128,7 @@ spec:
               value: {{ .Values.attachmentStorage.path | quote }}
             {{- end }}
 
-            {{- if .Values.xdebug.enabled }}
+            {{- if $xdebug.enabled }}
             - name: XDEBUG_PROXY_ENABLED
               value: "true"
             - name: XDEBUG_PROXY_ADDR
@@ -129,28 +138,28 @@ spec:
             # the config file or the server default.
             {{- $optional := list
                 (list "DATABASE_MAX_OPEN_CONNS" .Values.database.maxOpenConns)
-                (list "RETENTION_MAX_AGE" .Values.retention.maxAge)
-                (list "RETENTION_MAX_EVENTS" .Values.retention.maxEvents)
+                (list "RETENTION_MAX_AGE" $retention.maxAge)
+                (list "RETENTION_MAX_EVENTS" $retention.maxEvents)
                 (list "CORS_ORIGINS" .Values.cors.origins)
                 (list "CLIENT_SUPPORTED_EVENTS" .Values.supportedEvents)
-                (list "UI_DEFAULT_LIMIT" .Values.ui.defaultLimit)
-                (list "UI_MAX_LIMIT" .Values.ui.maxLimit)
-                (list "UI_DEFAULT_WINDOW" .Values.ui.defaultWindow)
-                (list "SENTRY_SOURCE_FETCH" .Values.sentry.sourceFetch)
-                (list "UPDATE_CHECK_ENABLED" .Values.update.checkEnabled)
-                (list "UPDATE_CHECK_INTERVAL" .Values.update.checkInterval)
-                (list "UPDATE_SELF" .Values.update.selfUpdate)
-                (list "XDEBUG_TRACE_MAX_UPLOAD" .Values.xdebugTrace.maxUpload)
-                (list "XDEBUG_TRACE_MAX_SIZE" .Values.xdebugTrace.maxSize)
-                (list "XDEBUG_TRACE_KEEP" .Values.xdebugTrace.keep) }}
-            {{- if .Values.xdebug.enabled }}
+                (list "UI_DEFAULT_LIMIT" $ui.defaultLimit)
+                (list "UI_MAX_LIMIT" $ui.maxLimit)
+                (list "UI_DEFAULT_WINDOW" $ui.defaultWindow)
+                (list "SENTRY_SOURCE_FETCH" $sentry.sourceFetch)
+                (list "UPDATE_CHECK_ENABLED" $update.checkEnabled)
+                (list "UPDATE_CHECK_INTERVAL" $update.checkInterval)
+                (list "UPDATE_SELF" $update.selfUpdate)
+                (list "XDEBUG_TRACE_MAX_UPLOAD" $xdebugTrace.maxUpload)
+                (list "XDEBUG_TRACE_MAX_SIZE" $xdebugTrace.maxSize)
+                (list "XDEBUG_TRACE_KEEP" $xdebugTrace.keep) }}
+            {{- if $xdebug.enabled }}
             {{- $optional = concat $optional (list
-                (list "XDEBUG_PROXY_IDE_ADDR" .Values.xdebug.ideAddr)
-                (list "XDEBUG_PROXY_MODE" .Values.xdebug.mode)
-                (list "XDEBUG_PROXY_IDLE_TIMEOUT" .Values.xdebug.idleTimeout)
-                (list "XDEBUG_PROXY_ALLOW_EVAL" .Values.xdebug.allowEval)
-                (list "XDEBUG_PROXY_ALLOW_CONTROL" .Values.xdebug.allowControl)
-                (list "XDEBUG_PROXY_PAUSE_ON_FIRST_LINE" .Values.xdebug.pauseOnFirstLine)) }}
+                (list "XDEBUG_PROXY_IDE_ADDR" $xdebug.ideAddr)
+                (list "XDEBUG_PROXY_MODE" $xdebug.mode)
+                (list "XDEBUG_PROXY_IDLE_TIMEOUT" $xdebug.idleTimeout)
+                (list "XDEBUG_PROXY_ALLOW_EVAL" $xdebug.allowEval)
+                (list "XDEBUG_PROXY_ALLOW_CONTROL" $xdebug.allowControl)
+                (list "XDEBUG_PROXY_PAUSE_ON_FIRST_LINE" $xdebug.pauseOnFirstLine)) }}
             {{- end }}
             {{- if .Values.metrics.enabled }}
             {{- $optional = append $optional (list "METRICS_ADDR" .Values.metrics.addr) }}
@@ -185,7 +194,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: {{ .Values.mcp.existingSecret }}
-                  key: {{ .Values.mcp.existingSecretKey }}
+                  key: {{ .Values.mcp.existingSecretKey | default "mcp-auth-token" }}
             {{- else if .Values.mcp.authToken }}
             - name: MCP_AUTH_TOKEN
               value: {{ .Values.mcp.authToken | quote }}

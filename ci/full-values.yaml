@@ -7,7 +7,7 @@ xdebug: {enabled: true, mode: standalone}
 xdebugTrace: {keep: 5}
 mcp: {enabled: true, transport: http, authToken: ci-token}
 metrics: {enabled: true, addr: ":9090"}
-tcpService: {enabled: true, type: ClusterIP}
+tcpService: {enabled: true, type: ClusterIP, proxy: true}
 config:
   projects:
     - key: shop

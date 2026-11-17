@@ -89,6 +89,12 @@ jobs:
           echo "DATABASE_DSN=$dsn"
           test "$dsn" = "/data/buggregator.db"
           helm uninstall reuse
+      - name: Upgrade from 2.x with --reuse-values (the server's update hint) works
+        run: |
+          ssa=""; [ "${{ matrix.helm }}" = "latest" ] && ssa="--server-side=false"
+          helm install hint ../old-chart
+          helm upgrade hint . --reuse-values --set image.tag=2.11.0 --wait --timeout 5m $ssa
+          helm uninstall hint
       - name: Every option on
         run: |
           helm install full . -f ci/full-values.yaml --wait --timeout 5m

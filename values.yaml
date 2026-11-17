@@ -197,12 +197,20 @@ service:
   # -- Annotations for the Service
   annotations: {}
 
-# -- A second Service for the TCP ports (SMTP, VarDumper, Monolog, HTTP proxy,
-# Xdebug): an Ingress carries only HTTP, so expose these with a LoadBalancer
-# or NodePort to reach them from outside the cluster.
+# -- A second Service for the TCP ports (SMTP, VarDumper, Monolog, Xdebug):
+# an Ingress carries only HTTP, so expose these with a LoadBalancer or NodePort
+# to reach them from outside the cluster.
+# These ports have no authentication. On most clouds a LoadBalancer gets a
+# public IP: limit who can connect, e.g.
+#   extraSpec:
+#     loadBalancerSourceRanges: ["203.0.113.0/24"]
+# or make it an internal load balancer with your cloud's annotation.
 tcpService:
   enabled: false
   type: LoadBalancer
+  # -- Also expose the HTTP proxy (8080). It forwards any request, HTTPS
+  # included, without authentication: on a public IP anyone can use it.
+  proxy: false
   annotations: {}
   # -- loadBalancerIP / externalTrafficPolicy and the like, passed as is
   extraSpec: {}

@@ -15,12 +15,12 @@ Buggregator has been deployed!
    - SMTP:        {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.smtpPort }}
    - VarDumper:   {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.varDumperPort }}
    - Monolog:     {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.monologPort }}
-   - HTTP proxy:  http://{{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.proxyPort }}
-{{- if .Values.xdebug.enabled }}
-   - Xdebug:      {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.xdebugPort }}
+   - HTTP proxy:  http://{{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.proxyPort | default 8080 }}
+{{- if (.Values.xdebug | default dict).enabled }}
+   - Xdebug:      {{ include "buggregator.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.xdebugPort | default 9003 }}
 {{- end }}
-{{- if .Values.tcpService.enabled }}
-   From outside the cluster, the TCP ports are on Service {{ include "buggregator.fullname" . }}-tcp ({{ .Values.tcpService.type }}).
+{{- if (.Values.tcpService | default dict).enabled }}
+   From outside the cluster, the TCP ports are on Service {{ include "buggregator.fullname" . }}-tcp ({{ .Values.tcpService.type | default "LoadBalancer" }}).
 {{- end }}
 
 {{- if .Values.metrics.enabled }}

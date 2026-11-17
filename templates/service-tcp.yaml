@@ -1,4 +1,4 @@
-{{- if .Values.tcpService.enabled }}
+{{- if (.Values.tcpService | default dict).enabled }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,7 +10,7 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  type: {{ .Values.tcpService.type }}
+  type: {{ .Values.tcpService.type | default "LoadBalancer" }}
   {{- with .Values.tcpService.extraSpec }}
   {{- toYaml . | nindent 2 }}
   {{- end }}
@@ -27,12 +27,14 @@ spec:
       targetPort: monolog
       protocol: TCP
       name: monolog
-    - port: {{ .Values.service.proxyPort }}
+    {{- if .Values.tcpService.proxy }}
+    - port: {{ .Values.service.proxyPort | default 8080 }}
       targetPort: proxy
       protocol: TCP
       name: proxy
-    {{- if .Values.xdebug.enabled }}
-    - port: {{ .Values.service.xdebugPort }}
+    {{- end }}
+    {{- if (.Values.xdebug | default dict).enabled }}
+    - port: {{ .Values.service.xdebugPort | default 9003 }}
       targetPort: xdebug
       protocol: TCP
       name: xdebug
