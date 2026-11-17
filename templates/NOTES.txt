@@ -42,9 +42,8 @@ Buggregator has been deployed!
 {{- end }}
 {{- end }}
 
-Database: SQLite ({{ .Values.database.dsn }})
-{{- if eq .Values.database.dsn ":memory:" }}
-  WARNING: Using in-memory database — data will be lost on pod restart.
-  For persistence, set database.dsn to a file path (e.g., "/data/buggregator.db")
-  and enable storage (storage.enabled=true).
+Database: SQLite ({{ include "buggregator.databaseDsn" . }})
+{{- if eq (include "buggregator.databaseDsn" .) ":memory:" }}
+  WARNING: in-memory database — data is lost on every pod restart.
+  Keep storage.enabled=true (the default) to store it on the volume.
 {{- end }}

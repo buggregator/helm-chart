@@ -1,3 +1,6 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be 1: Buggregator keeps its data in SQLite (one writer) on a ReadWriteOnce volume" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5,14 +8,24 @@ metadata:
   labels:
     {{- include "buggregator.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: 1
+  # The old pod must stop before the new one opens the same SQLite file and
+  # ReadWriteOnce volume.
+  strategy:
+    type: Recreate
+    # Clears the rollingUpdate block an older RollingUpdate release left in the
+    # live object; Kubernetes rejects it next to Recreate.
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "buggregator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        # Restart on a change of the auth values, not on the rendered secret:
+        # a generated JWT secret (jwtSecret "") must not restart the pod on
+        # every upgrade; an explicit one changes the checksum.
+        checksum/auth: {{ .Values.auth | toJson | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -65,12 +78,12 @@ spec:
           env:
             # --- Database ---
             - name: DATABASE_DSN
-              value: {{ .Values.database.dsn | quote }}
+              value: {{ include "buggregator.databaseDsn" . | quote }}
 
             # --- Attachment Storage ---
             - name: STORAGE_MODE
-              value: {{ .Values.attachmentStorage.mode | quote }}
-            {{- if eq .Values.attachmentStorage.mode "filesystem" }}
+              value: {{ include "buggregator.attachmentMode" . | quote }}
+            {{- if eq (include "buggregator.attachmentMode" .) "filesystem" }}
             - name: STORAGE_PATH
               value: {{ .Values.attachmentStorage.path | quote }}
             {{- end }}
@@ -79,9 +92,11 @@ spec:
             - name: CORS_ORIGINS
               value: {{ .Values.cors.origins | quote }}
 
-            # --- Events ---
+            # --- Events (unset = every module on) ---
+            {{- if .Values.supportedEvents }}
             - name: CLIENT_SUPPORTED_EVENTS
               value: {{ .Values.supportedEvents | quote }}
+            {{- end }}
 
             # --- Metrics ---
             {{- if .Values.metrics.enabled }}

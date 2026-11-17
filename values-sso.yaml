@@ -1,13 +1,6 @@
-# Example: Buggregator with SSO (Auth0), persistent storage, and Ingress
+# Example: Buggregator with SSO (Auth0), a bigger volume, Ingress with TLS and metrics
 #
-# helm install buggregator ./helm-chart -f helm-chart/values-sso.yaml
-
-database:
-  dsn: /data/buggregator.db
-
-attachmentStorage:
-  mode: filesystem
-  path: /data/storage
+# helm install buggregator oci://ghcr.io/buggregator/helm-chart/buggregator -f values-sso.yaml
 
 storage:
   enabled: true
@@ -21,7 +14,7 @@ auth:
   clientSecret: "your-client-secret"
   callbackUrl: "https://buggregator.example.com/auth/sso/callback"
   scopes: "openid,email,profile"
-  jwtSecret: "change-me-to-a-random-string"
+  # jwtSecret: empty = generated on install and kept across upgrades
 
 ingress:
   enabled: true

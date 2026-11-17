@@ -1,4 +1,5 @@
-# -- Number of replicas
+# -- Number of replicas. Must stay 1: SQLite has a single writer and the
+# volume is ReadWriteOnce. The chart fails to render with any other value.
 replicaCount: 1
 
 image:
@@ -15,15 +16,17 @@ fullnameOverride: ""
 # Database (SQLite)
 # =============================================================================
 database:
-  # -- SQLite DSN: ":memory:" (default, data lost on restart) or file path for persistence
-  dsn: ":memory:"
+  # -- SQLite DSN. Empty: /data/buggregator.db when storage.enabled, else
+  # ":memory:" (data lost on every restart).
+  dsn: ""
 
 # =============================================================================
 # Attachment storage (SMTP attachments, HTTP dump files)
 # =============================================================================
 attachmentStorage:
-  # -- Storage mode: "memory" (default) or "filesystem"
-  mode: memory
+  # -- Storage mode: "memory" or "filesystem". Empty: filesystem when
+  # storage.enabled, else memory.
+  mode: ""
   # -- Directory for filesystem mode (relative to working dir or absolute path)
   path: /data/storage
 
@@ -52,7 +55,8 @@ auth:
   callbackUrl: ""
   # -- OAuth scopes
   scopes: "openid,email,profile"
-  # -- JWT secret for signing internal session tokens (required when auth is enabled)
+  # -- JWT secret for signing internal session tokens. Empty: generated once
+  # on install and kept across upgrades (sessions survive helm upgrade).
   jwtSecret: ""
   # -- Use existing secret for auth credentials (keys: client-id, client-secret, jwt-secret)
   existingSecret: ""
@@ -75,8 +79,9 @@ mcp:
 # =============================================================================
 # Supported event types
 # =============================================================================
-# -- Comma-separated list of supported event types
-supportedEvents: "http-dump,inspector,monolog,profiler,ray,sentry,sms,smtp,var-dump"
+# -- Comma-separated list of enabled event types. Empty = all of them
+# (http-dump, inspector, monolog, profiler, ray, sentry, sms, smtp, var-dump, xdebug-trace)
+supportedEvents: ""
 
 # =============================================================================
 # Service ports
@@ -115,7 +120,8 @@ ingress:
 # Storage (PVC for persistent data: SQLite DB, attachments)
 # =============================================================================
 storage:
-  # -- Enable persistent storage
+  # -- Persistent volume at /data for the SQLite database and attachments.
+  # With it off, everything is kept in memory and lost on restart.
   enabled: true
   # -- Storage class (empty for default)
   storageClassName: ""
