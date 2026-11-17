@@ -1,18 +1,17 @@
 # Buggregator Helm Chart
 
-A Helm chart for deploying [Buggregator](https://buggregator.dev) — a lightweight, self-hosted debugging server for PHP applications — on Kubernetes.
-
-Buggregator aggregates multiple debugging tools (Sentry, Ray, VarDumper, Monolog, SMTP, HTTP Dumps, XHProf, Inspector) into a single platform with a real-time web UI.
+Deploys [Buggregator](https://buggregator.dev) on Kubernetes: one Go binary with an embedded SQLite database, web UI and WebSocket server. It receives Sentry, Ray, VarDumper, Monolog, SMTP, Inspector, profiler (XHProf) and HTTP dump events.
 
 ## Prerequisites
 
 - Kubernetes 1.23+
-- Helm 3.x
+- Helm 3.8+ (OCI registries)
+- A default StorageClass, or `storage.storageClassName`
 
-## Quick Start
+## Install
 
 ```bash
-helm install buggregator ./helm-chart
+helm install buggregator oci://ghcr.io/buggregator/helm-chart/buggregator
 ```
 
 Open the web UI:
@@ -21,51 +20,33 @@ Open the web UI:
 kubectl port-forward svc/buggregator 8000:8000
 ```
 
-Then navigate to http://localhost:8000.
+Then go to http://localhost:8000.
 
-## Installation
+A specific chart version: add `--version 3.0.0`. A specific server image: `--set image.tag=2.11.0` (default: the chart's `appVersion`).
 
-### Standalone (embedded database)
-
-The simplest setup — uses the built-in DoltDB, no external dependencies:
+## Upgrade
 
 ```bash
-helm install buggregator ./helm-chart
+helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reuse-values
 ```
 
-This is suitable for development, testing, or single-replica production use.
+The pod is replaced with the `Recreate` strategy: the old pod stops before the new one starts, because both would open the same SQLite file. Expect a few seconds of downtime.
 
-### With external PostgreSQL
+## Data
 
-For production or multi-replica setups, use an external database:
+By default a PersistentVolumeClaim (`storage.size`, 5Gi) is mounted at `/data`:
 
-```bash
-helm install buggregator ./helm-chart \
-  --set persistence.driver=db \
-  --set externalDatabase.driver=pgsql \
-  --set externalDatabase.host=my-postgres.database.svc \
-  --set externalDatabase.port=5432 \
-  --set externalDatabase.database=buggregator \
-  --set externalDatabase.username=buggregator \
-  --set externalDatabase.password=changeme
-```
+- the database: `/data/buggregator.db`
+- attachments (SMTP attachments, HTTP dump files): `/data/storage`
 
-Or use a values file:
+With `storage.enabled=false` everything is kept in memory and lost on every restart.
+
+Buggregator runs as **one replica**: SQLite has a single writer and the volume is ReadWriteOnce. Any other `replicaCount` fails to render.
+
+## Authentication (SSO)
 
 ```bash
-helm install buggregator ./helm-chart -f values-external-db.yaml
-```
-
-MySQL is also supported — set `externalDatabase.driver=mysql` and `externalDatabase.port=3306`.
-
-> **Note:** Buggregator does not create the database itself. You must create it beforehand. Tables are created automatically via migrations on startup.
-
-### With SSO authentication
-
-Enable SSO to restrict access to the web UI:
-
-```bash
-helm install buggregator ./helm-chart \
+helm install buggregator oci://ghcr.io/buggregator/helm-chart/buggregator \
   --set auth.enabled=true \
   --set auth.provider=auth0 \
   --set auth.providerUrl=https://your-tenant.auth0.com \
@@ -74,143 +55,56 @@ helm install buggregator ./helm-chart \
   --set auth.callbackUrl=https://buggregator.example.com/auth/sso/callback
 ```
 
-Supported providers: [Auth0](https://auth0.com/) and [Kinde](https://kinde.com/).
+Providers: `auth0`, `google`, `github`, `keycloak`, `gitlab`, `oidc`.
 
-A full example combining SSO, external database, and Ingress is available in `values-sso.yaml`.
+The session signing key (`auth.jwtSecret`) is generated on install and kept across upgrades, so users stay signed in. Set it yourself, or keep all three values in your own secret with `auth.existingSecret` (keys `client-id`, `client-secret`, `jwt-secret`).
 
-### With Ingress
+A full example with SSO, Ingress with TLS and metrics: [`values-sso.yaml`](values-sso.yaml).
 
-```bash
-helm install buggregator ./helm-chart \
-  --set ingress.enabled=true \
-  --set ingress.className=nginx \
-  --set ingress.hosts[0].host=buggregator.example.com \
-  --set ingress.hosts[0].paths[0].path=/ \
-  --set ingress.hosts[0].paths[0].pathType=Prefix
-```
+## Connecting your application
 
-## Connecting your PHP application
+Inside the cluster (release `buggregator`, namespace `default`):
 
-Once deployed, configure your PHP application to send data to Buggregator using the Kubernetes service name.
+| What | Address |
+|---|---|
+| Sentry DSN | `http://sentry@buggregator.default.svc:8000/1` |
+| Ray | host `buggregator.default.svc`, port `8000` |
+| SMTP | `buggregator.default.svc:1025` |
+| VarDumper | `tcp://buggregator.default.svc:9912` |
+| Monolog (socket handler) | `buggregator.default.svc:9913` |
+| HTTP dumps, Inspector, profiler | `http://buggregator.default.svc:8000` |
 
-Assuming the release is named `buggregator` in the `default` namespace:
+An Ingress carries only HTTP (port 8000). SMTP, VarDumper and Monolog are TCP: reach them from outside the cluster with `service.type=LoadBalancer` or `NodePort`.
 
-```dotenv
-# Sentry
-SENTRY_LARAVEL_DSN=http://sentry@buggregator.default.svc:8000/1
-
-# Ray
-RAY_HOST=buggregator.default.svc
-RAY_PORT=8000
-
-# SMTP
-MAIL_MAILER=smtp
-MAIL_HOST=buggregator.default.svc
-MAIL_PORT=1025
-
-# VarDumper
-VAR_DUMPER_FORMAT=server
-VAR_DUMPER_SERVER=buggregator.default.svc:9912
-
-# Monolog (SocketHandler)
-LOG_CHANNEL=socket
-LOG_SOCKET_URL=buggregator.default.svc:9913
-```
-
-## Ports
-
-| Port | Protocol | Module | Description |
-|------|----------|--------|-------------|
-| 8000 | HTTP | Sentry, Ray, Inspector, HTTP Dumps, XHProf | Web UI + HTTP-based event ingestion |
-| 1025 | SMTP | Fake SMTP Server | Captures outgoing emails |
-| 9912 | TCP | Symfony VarDumper | Receives `dump()` / `dd()` output |
-| 9913 | TCP | Monolog | Receives log records via SocketHandler |
-| 9914 | TCP | XHProf Profiler | Receives profiling data |
-| 2112 | HTTP | Metrics | Prometheus-compatible metrics endpoint |
-
-## Configuration Reference
-
-### Application
+## Values
 
 | Parameter | Description | Default |
-|-----------|-------------|---------|
-| `replicaCount` | Number of replicas (>1 requires external DB) | `1` |
-| `image.repository` | Container image | `ghcr.io/buggregator/server` |
-| `image.tag` | Image tag (defaults to `appVersion`) | `""` |
-| `app.env` | Application environment | `production` |
-| `app.debug` | Enable debug mode | `false` |
-| `app.encrypterKey` | Encryption key (auto-generated if empty) | `""` |
-| `app.existingSecret` | Existing secret name (key: `encrypter-key`) | `""` |
-
-### Persistence / Database
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `persistence.driver` | `cache` (embedded DoltDB) or `db` (external) | `cache` |
-| `externalDatabase.driver` | Database driver: `pgsql` or `mysql` | `pgsql` |
-| `externalDatabase.host` | Database host | `""` |
-| `externalDatabase.port` | Database port | `5432` |
-| `externalDatabase.database` | Database name | `buggregator` |
-| `externalDatabase.username` | Database username | `buggregator` |
-| `externalDatabase.password` | Database password | `""` |
-| `externalDatabase.existingSecret` | Existing secret (key: `db-password`) | `""` |
-
-### Authentication (SSO)
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `auth.enabled` | Enable SSO | `false` |
-| `auth.provider` | SSO provider: `auth0` or `kinde` | `auth0` |
-| `auth.providerUrl` | Provider URL | `""` |
-| `auth.clientId` | OAuth client ID | `""` |
-| `auth.clientSecret` | OAuth client secret | `""` |
-| `auth.callbackUrl` | OAuth callback URL | `""` |
-| `auth.scopes` | OAuth scopes | `openid,email,profile` |
-| `auth.existingSecret` | Existing secret (keys: `client-id`, `client-secret`) | `""` |
-
-### RoadRunner
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `roadrunner.http.numWorkers` | HTTP worker pool size | `2` |
-| `roadrunner.jobs.numWorkers` | Job queue worker pool size | `2` |
-| `roadrunner.centrifuge.numWorkers` | WebSocket worker pool size | `2` |
-| `roadrunner.logLevel` | Log level: `error`, `warn`, `info`, `debug` | `warn` |
-| `roadrunner.logEncoding` | Log format: `json` or `console` | `json` |
-| `roadrunner.logMode` | Log mode: `production`, `development`, `raw` | `production` |
-| `roadrunner.cors.allowedOrigin` | CORS allowed origins | `*` |
-| `roadrunner.cors.allowedHeaders` | CORS allowed headers | `*` |
-| `roadrunner.cors.allowCredentials` | CORS allow credentials | `true` |
-
-### Service & Ingress
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `service.type` | Service type | `ClusterIP` |
-| `service.httpPort` | Web UI port | `8000` |
-| `service.smtpPort` | SMTP port | `1025` |
-| `service.varDumperPort` | VarDumper port | `9912` |
-| `service.monologPort` | Monolog port | `9913` |
-| `service.profilerPort` | Profiler port | `9914` |
-| `service.metricsPort` | Metrics port | `2112` |
-| `ingress.enabled` | Enable Ingress | `false` |
-| `ingress.className` | Ingress class name | `""` |
-
-### Storage & Monitoring
-
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `storage.enabled` | Enable PVC for runtime data | `true` |
+|---|---|---|
+| `image.repository` | Server image | `ghcr.io/buggregator/server` |
+| `image.tag` | Image tag | chart `appVersion` |
+| `database.dsn` | SQLite DSN | `/data/buggregator.db` with storage, else `:memory:` |
+| `attachmentStorage.mode` | `filesystem` or `memory` | `filesystem` with storage, else `memory` |
+| `attachmentStorage.path` | Attachments directory | `/data/storage` |
+| `storage.enabled` | PVC at `/data` | `true` |
 | `storage.size` | PVC size | `5Gi` |
-| `storage.storageClassName` | Storage class | `""` |
-| `metrics.serviceMonitor.enabled` | Enable Prometheus ServiceMonitor | `false` |
-| `metrics.serviceMonitor.interval` | Scrape interval | `30s` |
-| `supportedEvents` | Enabled event types | `http-dump,inspector,...` |
+| `storage.storageClassName` | Storage class | `""` (cluster default) |
+| `cors.origins` | Allowed CORS origins | `*` |
+| `supportedEvents` | Enabled event types (comma-separated) | all |
+| `auth.enabled` | SSO | `false` |
+| `auth.provider` | `auth0`, `google`, `github`, `keycloak`, `gitlab`, `oidc` | `oidc` |
+| `auth.providerUrl`, `auth.clientId`, `auth.clientSecret`, `auth.callbackUrl`, `auth.scopes` | SSO settings | |
+| `auth.jwtSecret` | Session signing key | generated once, kept |
+| `auth.existingSecret` | Secret with `client-id`, `client-secret`, `jwt-secret` | `""` |
+| `mcp.enabled`, `mcp.transport`, `mcp.addr`, `mcp.authToken` | MCP server for AI assistants | off |
+| `metrics.enabled` | Prometheus `/metrics` | `false` |
+| `metrics.addr` | Separate metrics address (e.g. `:9090`); empty = main port | `""` |
+| `metrics.serviceMonitor.enabled` | Prometheus Operator ServiceMonitor | `false` |
+| `service.type` | Service type | `ClusterIP` |
+| `service.httpPort`, `smtpPort`, `varDumperPort`, `monologPort` | Service ports | `8000`, `1025`, `9912`, `9913` |
+| `ingress.*` | Ingress for the web UI | off |
+| `resources`, `nodeSelector`, `tolerations`, `affinity`, `podSecurityContext`, `securityContext` | Pod settings | empty |
 
-## Example Values Files
-
-- **`values-external-db.yaml`** — External PostgreSQL with tuned workers
-- **`values-sso.yaml`** — Full production setup: SSO + external DB + Ingress + TLS
+See [`values.yaml`](values.yaml) for every option.
 
 ## Uninstall
 
@@ -218,7 +112,8 @@ LOG_SOCKET_URL=buggregator.default.svc:9913
 helm uninstall buggregator
 ```
 
-> **Note:** The PVC for runtime data is not deleted automatically. Remove it manually if needed:
-> ```bash
-> kubectl delete pvc buggregator-runtime
-> ```
+The PVC is deleted with the release. Back up `/data/buggregator.db` first if you need it.
+
+## Releases
+
+A tag `vX.Y.Z` equal to `version` in `Chart.yaml` publishes `oci://ghcr.io/buggregator/helm-chart/buggregator:X.Y.Z` and a GitHub release with the packaged chart.

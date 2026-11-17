@@ -2,8 +2,9 @@ apiVersion: v2
 name: buggregator
 description: A Helm chart for Buggregator — lightweight, self-hosted debugging server. Single Go binary with embedded SQLite.
 type: application
-version: 2.0.0
-appVersion: "2.0.0"
+version: 3.0.0
+appVersion: "2.11.0"
+icon: https://raw.githubusercontent.com/buggregator/frontend/master/public/favicon/android-chrome-512x512.png
 keywords:
   - buggregator
   - debugging

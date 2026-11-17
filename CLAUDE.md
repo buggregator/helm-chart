@@ -14,7 +14,6 @@ The chart deploys the container image `ghcr.io/buggregator/server` which contain
 helm-chart/
 ├── Chart.yaml                  # Chart metadata (name, version, appVersion)
 ├── values.yaml                 # All configurable parameters with defaults
-├── values-external-db.yaml     # Example: persistent SQLite storage
 ├── values-sso.yaml             # Example: SSO + persistent storage + Ingress
 ├── .helmignore
 └── templates/
@@ -33,7 +32,9 @@ helm-chart/
 
 - **Container ports**: 8000 (HTTP/WebSocket), 1025 (SMTP), 9912 (VarDumper), 9913 (Monolog)
 - **Single binary**: The Go binary serves HTTP, WebSocket, and the embedded SPA frontend directly on port 8000
-- **Database**: Embedded SQLite — in-memory by default (`:memory:`), or file-based for persistence
+- **Database**: Embedded SQLite at `/data/buggregator.db` on the PVC by default; `:memory:` only with `storage.enabled=false`
+- **One replica, Recreate**: SQLite has one writer and the volume is RWO; `replicaCount` other than 1 fails to render
+- **Publishing**: tag `vX.Y.Z` (= Chart.yaml `version`) → `.github/workflows/release.yml` pushes `oci://ghcr.io/buggregator/helm-chart/buggregator:X.Y.Z` (the URL the docs and the server's update hint use)
 - **Health checks**: HTTP GET on `/api/settings` port 8000 (public endpoint, no auth required)
 - **Secrets**: Only auth secret (client-id, client-secret, jwt-secret) when SSO is enabled
 - **Storage**: `/data` for SQLite database file and filesystem attachments

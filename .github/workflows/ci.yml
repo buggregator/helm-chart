@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: helm lint
+        run: |
+          helm lint . --strict
+          helm lint . --strict -f values-sso.yaml
+      - name: Render guards
+        run: |
+          # Data on the volume by default.
+          helm template t . | grep -A1 'name: DATABASE_DSN' | grep -q '/data/buggregator.db'
+          helm template t . | grep -q 'type: Recreate'
+          # Memory only when the volume is off.
+          helm template t . --set storage.enabled=false | grep -A1 'name: DATABASE_DSN' | grep -q ':memory:'
+          # More than one replica must not render.
+          if helm template t . --set replicaCount=2 >/dev/null 2>&1; then echo "replicaCount=2 rendered"; exit 1; fi
+
+  install:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - uses: helm/kind-action@v1
+      - name: Install and reach the server
+        run: |
+          helm install bg . --wait --timeout 5m
+          kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
+          sleep 3
+          curl -fsS http://127.0.0.1:18000/api/version
+          # One event, then an upgrade: it must survive (data on the volume, Recreate).
+          curl -fsS -X POST http://127.0.0.1:18000/ -H 'X-Buggregator-Event: http-dump' -d 'kept across upgrade'
+          kill %1
+          helm upgrade bg . --wait --timeout 5m --set podAnnotations.rollout=two
+          kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
+          sleep 3
+          curl -fsS 'http://127.0.0.1:18000/api/events?type=http-dump' | grep -q 'kept across upgrade'
+      - name: JWT secret survives upgrade
+        run: |
+          helm install sso . --set storage.enabled=false --set auth.enabled=true \
+            --set auth.providerUrl=https://idp.example.com --set auth.clientId=x --set auth.clientSecret=y
+          before=$(kubectl get secret sso-buggregator-auth -o jsonpath='{.data.jwt-secret}')
+          helm upgrade sso . --reuse-values
+          after=$(kubectl get secret sso-buggregator-auth -o jsonpath='{.data.jwt-secret}')
+          test -n "$before" && test "$before" = "$after"
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl get pods -o wide
+          kubectl describe pods
+          kubectl logs -l app.kubernetes.io/name=buggregator --tail=100 --all-containers || true
