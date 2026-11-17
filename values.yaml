@@ -79,8 +79,9 @@ mcp:
 # =============================================================================
 # Supported event types
 # =============================================================================
-# -- Comma-separated list of supported event types
-supportedEvents: "http-dump,inspector,monolog,profiler,ray,sentry,sms,smtp,var-dump"
+# -- Comma-separated list of enabled event types. Empty = all of them
+# (http-dump, inspector, monolog, profiler, ray, sentry, sms, smtp, var-dump, xdebug-trace)
+supportedEvents: ""
 
 # =============================================================================
 # Service ports

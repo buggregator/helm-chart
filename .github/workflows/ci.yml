@@ -22,19 +22,36 @@ jobs:
           helm template t . | grep -q 'type: Recreate'
           # Memory only when the volume is off.
           helm template t . --set storage.enabled=false | grep -A1 'name: DATABASE_DSN' | grep -q ':memory:'
+          # Every module on by default: no event list is forced.
+          if helm template t . | grep -q CLIENT_SUPPORTED_EVENTS; then echo "CLIENT_SUPPORTED_EVENTS set by default"; exit 1; fi
+          # An explicit JWT secret rolls the pod when it changes.
+          test "$(helm template t . --set auth.enabled=true,auth.jwtSecret=a | grep checksum/auth)" != "$(helm template t . --set auth.enabled=true,auth.jwtSecret=b | grep checksum/auth)"
           # More than one replica must not render.
           if helm template t . --set replicaCount=2 >/dev/null 2>&1; then echo "replicaCount=2 rendered"; exit 1; fi
 
   install:
     runs-on: ubuntu-latest
     needs: lint
+    defaults:
+      run:
+        working-directory: chart
     steps:
       - uses: actions/checkout@v4
+        with:
+          path: chart
+      # The chart as published before 3.0.0 (2.0.0), to test the upgrade.
+      - uses: actions/checkout@v4
+        with:
+          ref: 076b3a096e5ff52a005476f2e105413e8f085ff0
+          path: old-chart
       - uses: azure/setup-helm@v4
       - uses: helm/kind-action@v1
       - name: Install and reach the server
         run: |
-          helm install bg . --wait --timeout 5m
+          # Start from the chart users have today (2.0.0: RollingUpdate,
+          # image 2.0.0) and upgrade to this one.
+          helm install bg ../old-chart --wait --timeout 5m --set database.dsn=/data/buggregator.db
+          helm upgrade bg . --wait --timeout 5m
           kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
           sleep 3
           curl -fsS http://127.0.0.1:18000/api/version

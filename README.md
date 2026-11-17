@@ -59,6 +59,8 @@ Providers: `auth0`, `google`, `github`, `keycloak`, `gitlab`, `oidc`.
 
 The session signing key (`auth.jwtSecret`) is generated on install and kept across upgrades, so users stay signed in. Set it yourself, or keep all three values in your own secret with `auth.existingSecret` (keys `client-id`, `client-secret`, `jwt-secret`).
 
+The key is kept by reading the release's secret from the cluster (`lookup`). Tools that only render templates (Argo CD, Flux with `helm template`) cannot read it and would make a new key on every sync: there set `auth.jwtSecret` or `auth.existingSecret`.
+
 A full example with SSO, Ingress with TLS and metrics: [`values-sso.yaml`](values-sso.yaml).
 
 ## Connecting your application
