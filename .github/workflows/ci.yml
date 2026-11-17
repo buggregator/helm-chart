@@ -32,6 +32,11 @@ jobs:
   install:
     runs-on: ubuntu-latest
     needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        # Helm 3 patches with a three-way merge, Helm 4 uses server-side apply.
+        helm: [v3.16.3, latest]
     defaults:
       run:
         working-directory: chart
@@ -45,6 +50,8 @@ jobs:
           ref: 076b3a096e5ff52a005476f2e105413e8f085ff0
           path: old-chart
       - uses: azure/setup-helm@v4
+        with:
+          version: ${{ matrix.helm }}
       - uses: helm/kind-action@v1
       - name: Install and reach the server
         run: |

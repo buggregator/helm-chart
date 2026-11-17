@@ -13,6 +13,9 @@ spec:
   # ReadWriteOnce volume.
   strategy:
     type: Recreate
+    # Clears the rollingUpdate block an older RollingUpdate release left in the
+    # live object; Kubernetes rejects it next to Recreate.
+    rollingUpdate: null
   selector:
     matchLabels:
       {{- include "buggregator.selectorLabels" . | nindent 6 }}
