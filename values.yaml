@@ -296,6 +296,14 @@ securityContext:
     drop:
       - ALL
 
+# -- An init container that gives /data to the pod's user once (chown) before
+# the server starts. Needed only where the volume plugin ignores fsGroup
+# (hostPath, local-path, many NFS setups) and the data was written by a
+# release that ran as root (chart 2.x). It runs as root with CHOWN, FOWNER and
+# DAC_OVERRIDE, so clusters with the "restricted" Pod Security level reject it.
+volumePermissions:
+  enabled: false
+
 # -- No limits by default: memory grows with the in-memory attachment store
 # and big payloads. Set them for your load.
 resources:

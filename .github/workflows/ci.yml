@@ -67,7 +67,9 @@ jobs:
           # Helm 4 installed the old chart with server-side apply, which cannot
           # drop the old rollingUpdate block: the README's one-time step.
           ssa=""; [ "${{ matrix.helm }}" = "latest" ] && ssa="--server-side=false"
-          helm upgrade bg . --wait --timeout 5m $ssa
+          # The old release wrote /data as root and kind's local-path volumes
+          # ignore fsGroup: the README's volumePermissions step.
+          helm upgrade bg . --wait --timeout 5m $ssa --set volumePermissions.enabled=true
           kubectl port-forward svc/bg-buggregator 18000:8000 >/dev/null 2>&1 &
           sleep 3
           curl -fsS http://127.0.0.1:18000/api/version
