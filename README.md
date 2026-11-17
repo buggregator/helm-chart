@@ -32,6 +32,8 @@ helm upgrade buggregator oci://ghcr.io/buggregator/helm-chart/buggregator --reus
 
 The pod is replaced with the `Recreate` strategy: the old pod stops before the new one starts, because both would open the same SQLite file. Expect a few seconds of downtime.
 
+**From chart 2.x installed with Helm 4.** Chart 2.x used the RollingUpdate strategy, and Helm 4's server-side apply cannot remove its leftover settings, so the first upgrade fails with `spec.strategy.rollingUpdate: Forbidden`. Run that first upgrade once with `--server-side=false`. Releases installed with Helm 3 upgrade as is.
+
 ## Data
 
 By default a PersistentVolumeClaim (`storage.size`, 5Gi) is mounted at `/data`:
