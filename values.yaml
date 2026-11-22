@@ -88,6 +88,11 @@ auth:
   # -- Who may sign in, by domain (e.g. ["mycompany.com"]). google: the
   # Workspace (hd) domain; other providers: the domain of the confirmed email.
   allowedDomains: []
+  # -- Who may read the audit log (sign-ins, logouts, clears, deletes,
+  # settings), by email (e.g. ["me@mycompany.com"]). Empty = every signed-in
+  # user sees it, with every user's email and IP. Server 2.14.0+ (older ones
+  # ignore it).
+  adminEmails: []
   # -- JWT secret for signing internal session tokens. Empty: generated once
   # on install and kept across upgrades (sessions survive helm upgrade).
   jwtSecret: ""

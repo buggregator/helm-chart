@@ -103,6 +103,8 @@ Limit who may sign in, else every account the provider accepts gets in (with `go
 
 The provider must confirm the email. For `google` a domain is the Workspace (`hd`) domain; for other providers, the domain of the email. Every request re-checks the lists, so narrowing them also signs out sessions that no longer match. Needs server 2.14.0 or later.
 
+The audit log (sign-ins, logouts, clears, deletes, settings changes) is open to every signed-in user, with every user's email and IP. Limit it to admins with `--set 'auth.adminEmails={me@mycompany.com}'`. Behind the Ingress the IP shown is the proxy's. Needs server 2.14.0 or later.
+
 The session signing key (`auth.jwtSecret`) is generated on install and kept across upgrades, so users stay signed in. Set it yourself, or keep all three values in your own secret with `auth.existingSecret` (keys `client-id`, `client-secret`, `jwt-secret`).
 
 The key is kept by reading the release's secret from the cluster (`lookup`). Tools that only render templates (Argo CD, Flux with `helm template`) cannot read it and would make a new key on every sync: there set `auth.jwtSecret` or `auth.existingSecret`.
@@ -178,6 +180,7 @@ ingress:
 | `auth.provider` | `auth0`, `google`, `github`, `keycloak`, `gitlab`, `oidc` | `oidc` |
 | `auth.providerUrl`, `auth.clientId`, `auth.clientSecret`, `auth.callbackUrl`, `auth.scopes` | SSO settings | |
 | `auth.allowedEmails`, `auth.allowedDomains` | Who may sign in: lists of emails / domains (google: Workspace domain). Both empty = any account the provider signs in. Server 2.14.0+ | `[]` |
+| `auth.adminEmails` | Who may read the audit log. Empty = every signed-in user. Server 2.14.0+ | `[]` |
 | `auth.jwtSecret` | Session signing key | generated once, kept |
 | `auth.existingSecret` | Secret with `client-id`, `client-secret`, `jwt-secret` | `""` |
 | `mcp.enabled`, `mcp.transport`, `mcp.addr`, `mcp.authToken` | MCP server for AI assistants | off |
