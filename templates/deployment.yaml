@@ -236,6 +236,10 @@ spec:
             - name: AUTH_ALLOWED_DOMAINS
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- with .Values.auth.adminEmails }}
+            - name: AUTH_ADMIN_EMAILS
+              value: {{ join "," . | quote }}
+            {{- end }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
