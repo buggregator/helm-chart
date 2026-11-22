@@ -82,7 +82,7 @@ auth:
   scopes: "openid,email,profile"
   # -- Who may sign in, by email (e.g. ["me@gmail.com"]). The provider must
   # confirm the email. Both lists empty = every account the provider signs in
-  # (with google: any Google account), so set one when the server is reachable
+  # (with google and an External app: any Google account), so set one when the server is reachable
   # from outside. Every request re-checks the lists. Server 2.14.0+ (older ones ignore it).
   allowedEmails: []
   # -- Who may sign in, by domain (e.g. ["mycompany.com"]). google: the

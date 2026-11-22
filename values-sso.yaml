@@ -15,6 +15,7 @@ auth:
   callbackUrl: "https://buggregator.example.com/auth/sso/callback"
   scopes: "openid,email,profile"
   allowedDomains: ["mycompany.com"]  # who may sign in; or allowedEmails: ["me@gmail.com"]
+  adminEmails: ["me@mycompany.com"]  # who may read the audit log; empty = every signed-in user
   # jwtSecret: empty = generated on install and kept across upgrades
 
 ingress:
