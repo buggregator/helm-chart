@@ -80,6 +80,14 @@ auth:
   callbackUrl: ""
   # -- OAuth scopes
   scopes: "openid,email,profile"
+  # -- Who may sign in, by email (e.g. ["me@gmail.com"]). The provider must
+  # confirm the email. Both lists empty = every account the provider signs in
+  # (with google: any Google account), so set one when the server is reachable
+  # from outside. Every request re-checks the lists. Server 2.14.0+ (older ones ignore it).
+  allowedEmails: []
+  # -- Who may sign in, by domain (e.g. ["mycompany.com"]). google: the
+  # Workspace (hd) domain; other providers: the domain of the confirmed email.
+  allowedDomains: []
   # -- JWT secret for signing internal session tokens. Empty: generated once
   # on install and kept across upgrades (sessions survive helm upgrade).
   jwtSecret: ""
