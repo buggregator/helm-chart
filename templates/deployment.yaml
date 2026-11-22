@@ -228,6 +228,14 @@ spec:
               value: {{ .Values.auth.callbackUrl | quote }}
             - name: AUTH_SCOPES
               value: {{ .Values.auth.scopes | quote }}
+            {{- with .Values.auth.allowedEmails }}
+            - name: AUTH_ALLOWED_EMAILS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.auth.allowedDomains }}
+            - name: AUTH_ALLOWED_DOMAINS
+              value: {{ join "," . | quote }}
+            {{- end }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
