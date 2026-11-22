@@ -22,7 +22,7 @@ kubectl port-forward svc/buggregator 8000:8000
 
 Then go to http://localhost:8000.
 
-A specific chart version: add `--version 3.2.0`. A specific server image: `--set image.tag=2.13.0` (default: the chart's `appVersion`).
+A specific chart version: add `--version 3.3.0`. A specific server image: `--set image.tag=2.14.0` (default: the chart's `appVersion`).
 
 ## Upgrade
 
@@ -94,7 +94,7 @@ helm install buggregator oci://ghcr.io/buggregator/helm-chart/buggregator \
 
 Providers: `auth0`, `google`, `github`, `keycloak`, `gitlab`, `oidc`.
 
-Limit who may sign in, else every account the provider accepts gets in (with `google`: any Google account). Set this when the server is reachable from outside:
+Limit who may sign in, else every account the provider accepts gets in (with `google` and an External app: any Google account). Set this when the server is reachable from outside:
 
 ```bash
   --set 'auth.allowedEmails={me@gmail.com,qa@gmail.com}' \
