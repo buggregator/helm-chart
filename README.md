@@ -22,7 +22,7 @@ kubectl port-forward svc/buggregator 8000:8000
 
 Then go to http://localhost:8000.
 
-A specific chart version: add `--version 3.5.0`. A specific server image: `--set image.tag=2.16.0` (default: the chart's `appVersion`).
+A specific chart version: add `--version 3.5.1`. A specific server image: `--set image.tag=2.16.1` (default: the chart's `appVersion`).
 
 ## Upgrade
 
